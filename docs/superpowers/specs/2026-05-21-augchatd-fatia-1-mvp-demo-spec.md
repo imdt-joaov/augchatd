@@ -149,7 +149,7 @@ Conjunto fechado de 5 mensagens (§F.1 do arch doc). Sem mensagens granulares po
 | `augchatd:jwt` | parent → iframe | `{ jwt: string }` | Resposta à `ready` ou após `auth-required` |
 | `augchatd:auth-required` | iframe → parent | `{ reason: "jwt_expired" \| "jwt_invalid" \| "mcp_credentials_expired" \| "session_revoked" }` | Mapeado a partir do código 401 (§4.3) |
 | `augchatd:resize` | iframe → parent | `{ height: number }` | `ResizeObserver` no `documentElement` |
-| `augchatd:fatal` | iframe → parent | `{ code: string, message: string }` | erro irrecuperável de boot |
+| `augchatd:fatal` | iframe → parent | `{ code: string, message: string }` | erro irrecuperável de boot. **Definida no protocolo mas sem gatilho real em Fatia 1** — reservada para erros futuros (ex.: incompatibilidade de versão UI/backend). O único caso fatal em Fatia 1 (standalone sem `/demo/jwt` disponível) ocorre quando não há parent para notificar; é renderizado inline. |
 
 **Validação de origem:**
 - Parent declara sua própria origin via query string ao carregar o iframe: `<iframe src="https://augchatd/?parent_origin=https%3A%2F%2Fapp.example.com">`.

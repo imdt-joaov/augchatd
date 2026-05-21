@@ -54,9 +54,11 @@ ui/
 ├── index.html
 └── src/
     ├── main.tsx                      # Entry, mounts <App>
-    ├── App.tsx                       # assistant-ui Thread + runtime
+    ├── App.tsx                       # assistant-ui Thread + runtime + sidebar
     ├── parent.ts                     # postMessage protocol (5 messages)
-    └── runtime.ts                    # useChatRuntime adapter with JWT header + 401 handling
+    ├── runtime.ts                    # useChatRuntime adapter with JWT header + 401 handling
+    ├── conversations-client.ts       # /conversations API client + localStorage active-conv-id
+    └── Sidebar.tsx                   # conversation list + new + delete
 ```
 
 Tests mirror `src/` under `tests/`, plus `tests/e2e/demo.test.ts`.
@@ -107,7 +109,8 @@ Create `/home/joao/augchatd/package.json`:
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "build:ui": "cd ui && bun run build",
-    "build": "bun run build:ui && bun build src/index.ts --outdir dist --target bun",
+    "typecheck": "bunx tsc --noEmit",
+    "build": "bun run typecheck && bun run build:ui && bun build src/index.ts --outdir dist --target bun",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "format": "prettier --write ."
@@ -2926,7 +2929,369 @@ git commit -m "feat(ui): assistant-ui Thread + JWT-aware runtime + parent bridge
 
 ---
 
-### Task 20: Static UI serving from backend
+### Task 20: UI conversation sidebar (list + new + delete + retomada via localStorage)
+
+**Files:**
+- Create: `ui/src/conversations-client.ts`
+- Create: `ui/src/Sidebar.tsx`
+- Test: `ui/src/conversations-client.test.ts`
+- Modify: `ui/src/App.tsx`, `ui/src/runtime.ts`
+
+Per Spec §7. The single-conversation `App.tsx` from Task 19 can't satisfy "reload preserves the conversation" or "delete via UI". This task adds: (a) an API client for `/conversations` + `DELETE /conversations/{id}`, (b) a `Sidebar` component that lists conversations and supports new/delete, (c) `localStorage` persistence of the active conversation id, (d) wiring in `App.tsx` so reload resumes the same conversation and the sidebar can switch between them.
+
+- [ ] **Step 1: Write failing tests for the client + localStorage helper**
+
+Create `/home/joao/augchatd/ui/src/conversations-client.test.ts`:
+
+```typescript
+import { test, expect, beforeEach } from 'bun:test';
+import { loadActiveConvId, setActiveConvId } from './conversations-client';
+
+const KEY = 'augchatd:activeConvId';
+
+beforeEach(() => {
+  // jsdom-free env: bun:test provides a localStorage shim via Bun
+  globalThis.localStorage?.clear?.();
+});
+
+test('loadActiveConvId returns stored id when present', () => {
+  globalThis.localStorage.setItem(KEY, 'conv-xyz');
+  expect(loadActiveConvId()).toBe('conv-xyz');
+});
+
+test('loadActiveConvId mints a fresh UUID when absent and persists it', () => {
+  expect(globalThis.localStorage.getItem(KEY)).toBeNull();
+  const id = loadActiveConvId();
+  expect(id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(globalThis.localStorage.getItem(KEY)).toBe(id);
+});
+
+test('setActiveConvId persists', () => {
+  setActiveConvId('conv-abc');
+  expect(globalThis.localStorage.getItem(KEY)).toBe('conv-abc');
+});
+```
+
+If `localStorage` is not available under `bun test` for this UI directory, gate the tests with `test.if(typeof localStorage !== 'undefined')` — the helpers themselves must work with or without the storage (degrade to in-memory).
+
+- [ ] **Step 2: Run, verify failure**
+
+Run: `cd ui && bun test src/conversations-client.test.ts && cd ..`
+Expected: FAIL with "Cannot find module".
+
+- [ ] **Step 3: Implement the API client + localStorage helper**
+
+Create `/home/joao/augchatd/ui/src/conversations-client.ts`:
+
+```typescript
+const STORAGE_KEY = 'augchatd:activeConvId';
+
+const storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null =
+  typeof localStorage !== 'undefined' ? localStorage : null;
+
+export interface ConversationSummary {
+  id: string;
+  userId: string;
+  title: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export function loadActiveConvId(): string {
+  const stored = storage?.getItem(STORAGE_KEY);
+  if (stored) return stored;
+  const fresh = crypto.randomUUID();
+  storage?.setItem(STORAGE_KEY, fresh);
+  return fresh;
+}
+
+export function setActiveConvId(id: string): void {
+  storage?.setItem(STORAGE_KEY, id);
+}
+
+export async function listConversations(jwt: string): Promise<ConversationSummary[]> {
+  const res = await fetch('/conversations', {
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { conversations: ConversationSummary[] };
+  return body.conversations;
+}
+
+export async function deleteConversation(jwt: string, id: string): Promise<boolean> {
+  const res = await fetch(`/conversations/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${jwt}` },
+  });
+  return res.ok;
+}
+```
+
+- [ ] **Step 4: Run, verify pass**
+
+Run: `cd ui && bun test src/conversations-client.test.ts && cd ..`
+Expected: 3 passing.
+
+- [ ] **Step 5: Implement Sidebar component**
+
+Create `/home/joao/augchatd/ui/src/Sidebar.tsx`:
+
+```tsx
+import { useEffect, useState } from 'react';
+import {
+  type ConversationSummary,
+  listConversations,
+  deleteConversation,
+} from './conversations-client';
+
+export interface SidebarProps {
+  jwt: string;
+  activeId: string;
+  refreshKey: number;
+  onSelect: (id: string) => void;
+  onNew: () => void;
+}
+
+export function Sidebar({ jwt, activeId, refreshKey, onSelect, onNew }: SidebarProps) {
+  const [items, setItems] = useState<ConversationSummary[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listConversations(jwt).then((list) => {
+      if (!cancelled) setItems(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [jwt, refreshKey, activeId]);
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ok = await deleteConversation(jwt, id);
+    if (!ok) return;
+    setItems((prev) => prev.filter((c) => c.id !== id));
+    if (id === activeId) onNew();
+  };
+
+  return (
+    <aside
+      style={{
+        width: 240,
+        borderRight: '1px solid #ddd',
+        padding: 12,
+        overflowY: 'auto',
+        boxSizing: 'border-box',
+      }}
+    >
+      <button
+        onClick={onNew}
+        style={{ width: '100%', padding: 8, marginBottom: 12, cursor: 'pointer' }}
+      >
+        + New conversation
+      </button>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        {items.map((c) => (
+          <li
+            key={c.id}
+            onClick={() => onSelect(c.id)}
+            style={{
+              padding: 8,
+              cursor: 'pointer',
+              background: c.id === activeId ? '#eef' : 'transparent',
+              borderRadius: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 4,
+            }}
+          >
+            <span
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1,
+              }}
+            >
+              {c.title ?? c.id.slice(0, 8)}
+            </span>
+            <button
+              onClick={(e) => handleDelete(c.id, e)}
+              aria-label="Delete conversation"
+              style={{
+                marginLeft: 8,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 16,
+              }}
+            >
+              ×
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
+```
+
+- [ ] **Step 6: Extend the runtime adapter with an onFinish callback**
+
+Modify `/home/joao/augchatd/ui/src/runtime.ts` to forward `onFinish` from `useChatRuntime` so `App.tsx` can bump the sidebar refresh key after each successful turn:
+
+```typescript
+import { useChatRuntime } from '@assistant-ui/react-ai-sdk';
+import type { AuthRequiredReason } from './parent';
+
+export interface UseAugchatdRuntimeOptions {
+  conversationId: string;
+  jwt: string | null;
+  onAuthRequired: (reason: AuthRequiredReason) => void;
+  onFinish?: () => void;
+}
+
+export function useAugchatdRuntime(opts: UseAugchatdRuntimeOptions) {
+  return useChatRuntime({
+    api: `/conversations/${opts.conversationId}/messages`,
+    headers: () => (opts.jwt ? { Authorization: `Bearer ${opts.jwt}` } : {}),
+    body: ({ messages }) => {
+      const last = messages[messages.length - 1];
+      return { message: typeof last?.content === 'string' ? last.content : '' };
+    },
+    onFinish: () => opts.onFinish?.(),
+    onError: (err) => {
+      const status = (err as { status?: number }).status;
+      if (status === 401) {
+        const body = (err as { body?: { error?: string } }).body;
+        const reason: AuthRequiredReason =
+          body?.error === 'mcp_credentials_expired'
+            ? 'mcp_credentials_expired'
+            : body?.error === 'session_not_found'
+              ? 'session_revoked'
+              : body?.error === 'auth_invalid'
+                ? 'jwt_invalid'
+                : 'jwt_expired';
+        opts.onAuthRequired(reason);
+      }
+    },
+  });
+}
+```
+
+- [ ] **Step 7: Rewrite App.tsx to wire Sidebar + active conv + retomada**
+
+Replace `/home/joao/augchatd/ui/src/App.tsx`:
+
+```tsx
+import { useEffect, useRef, useState } from 'react';
+import { AssistantRuntimeProvider, Thread } from '@assistant-ui/react';
+import {
+  createParentBridge,
+  parseParentOrigin,
+  type AuthRequiredReason,
+  type Bridge,
+} from './parent';
+import { useAugchatdRuntime } from './runtime';
+import { Sidebar } from './Sidebar';
+import { loadActiveConvId, setActiveConvId } from './conversations-client';
+
+export function App() {
+  const [jwt, setJwt] = useState<string | null>(null);
+  const [fatal, setFatal] = useState<string | null>(null);
+  const [activeConvId, setActiveConv] = useState<string>(() => loadActiveConvId());
+  const [refreshKey, setRefreshKey] = useState(0);
+  const bridgeRef = useRef<Bridge | null>(null);
+
+  useEffect(() => {
+    setActiveConvId(activeConvId);
+  }, [activeConvId]);
+
+  useEffect(() => {
+    const parentOrigin = parseParentOrigin(window.location.href);
+    if (!parentOrigin) {
+      fetch('/demo/jwt')
+        .then((r) => {
+          if (!r.ok) throw new Error('demo_jwt_unavailable');
+          return r.json();
+        })
+        .then((j: { jwt: string }) => setJwt(j.jwt))
+        .catch(() => setFatal('no_parent_origin_and_no_demo_jwt'));
+      return;
+    }
+    const bridge = createParentBridge({
+      win: window,
+      parentOrigin,
+      onMessage: (msg) => {
+        if (msg.type === 'augchatd:jwt') setJwt(msg.jwt);
+      },
+    });
+    bridgeRef.current = bridge;
+    bridge.emit({ type: 'augchatd:ready' });
+
+    const ro = new ResizeObserver(() => {
+      bridge.emit({ type: 'augchatd:resize', height: document.documentElement.scrollHeight });
+    });
+    ro.observe(document.documentElement);
+
+    return () => {
+      ro.disconnect();
+      bridge.dispose();
+    };
+  }, []);
+
+  const onAuthRequired = (reason: AuthRequiredReason) => {
+    setJwt(null);
+    bridgeRef.current?.emit({ type: 'augchatd:auth-required', reason });
+  };
+
+  const handleNewConversation = () => setActiveConv(crypto.randomUUID());
+  const handleSelect = (id: string) => setActiveConv(id);
+
+  const runtime = useAugchatdRuntime({
+    conversationId: activeConvId,
+    jwt,
+    onAuthRequired,
+    onFinish: () => setRefreshKey((k) => k + 1),
+  });
+
+  if (fatal) return <pre>FATAL: {fatal}</pre>;
+  if (!jwt) return <div>Waiting for credentials…</div>;
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <div style={{ display: 'flex', height: '100vh' }}>
+        <Sidebar
+          jwt={jwt}
+          activeId={activeConvId}
+          refreshKey={refreshKey}
+          onSelect={handleSelect}
+          onNew={handleNewConversation}
+        />
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <Thread />
+        </div>
+      </div>
+    </AssistantRuntimeProvider>
+  );
+}
+```
+
+- [ ] **Step 8: Build to verify**
+
+Run: `cd ui && bun run build && cd ..`
+Expected: build succeeds with no TS errors; `ui/dist/index.html` present.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add ui/src/conversations-client.ts ui/src/conversations-client.test.ts ui/src/Sidebar.tsx ui/src/App.tsx ui/src/runtime.ts
+git commit -m "feat(ui): conversation sidebar with list/new/delete + retomada via localStorage"
+```
+
+---
+
+### Task 21: Static UI serving from backend
 
 **Files:**
 - Create: `src/server/routes/ui.ts`
@@ -3107,7 +3472,7 @@ git commit -m "feat(server): serve bundled UI from disk with SPA fallback"
 
 ---
 
-### Task 21: Boot orchestration (src/index.ts)
+### Task 22: Boot orchestration (src/index.ts)
 
 **Files:**
 - Create: `src/index.ts`
@@ -3226,7 +3591,7 @@ git commit -m "feat: boot orchestration — parse env, load demo session, start 
 
 ---
 
-### Task 22: End-to-end demo test
+### Task 23: End-to-end demo test
 
 **Files:**
 - Create: `tests/e2e/demo.test.ts`
@@ -3371,7 +3736,7 @@ git commit -m "test(e2e): full demo flow with mocked LLM"
 
 ---
 
-### Task 23: Dockerfile
+### Task 24: Dockerfile
 
 **Files:**
 - Create: `Dockerfile`
@@ -3397,11 +3762,13 @@ COPY package.json bun.lockb ./
 RUN bun install --frozen-lockfile --production
 
 FROM oven/bun:1.1-alpine AS runtime
+ARG AUGCHATD_VERSION_SHA=dev
 WORKDIR /app
 ENV NODE_ENV=production
 ENV AUGCHATD_HOT_DIR=/var/lib/augchatd/hot
 ENV AUGCHATD_LISTEN=0.0.0.0:8080
 ENV AUGCHATD_UI_DIR=/app/ui/dist
+ENV AUGCHATD_VERSION_SHA=${AUGCHATD_VERSION_SHA}
 
 COPY --from=backend-deps /app/node_modules ./node_modules
 COPY package.json tsconfig.json ./
@@ -3422,7 +3789,7 @@ ENTRYPOINT ["bun", "run", "src/index.ts"]
 
 Run:
 ```bash
-docker build -t augchatd:dev .
+docker build --build-arg AUGCHATD_VERSION_SHA=$(git rev-parse --short HEAD) -t augchatd:dev .
 docker run --rm -p 18080:8080 \
   -e AUGCHATD_MODE=demo \
   -e AUGCHATD_JWT_SIGNING_KEY_CURRENT=$(openssl rand -base64 32) \
@@ -3447,7 +3814,7 @@ git commit -m "build: Dockerfile multi-stage (UI build + backend runtime)"
 
 ---
 
-### Task 24: README quickstart verification with a real LLM key
+### Task 25: README quickstart verification with a real LLM key
 
 **Files:**
 - Modify: `README.md` (only the Quickstart section, if needed)
@@ -3493,14 +3860,14 @@ Run through the spec sections (clusters A–I in the architecture doc) and confi
 - **Cluster A — Identity**
   - A.1 SAN URI tenant id → deferred (no mTLS in Fatia 1; demo uses fixed `urn:augchatd-tenant:demo`). ✓
   - A.2 JWT claims set → Task 6 (sign), all tests assert `sub`, `aud`, `sid`, `exp`. ✓
-  - A.3 conversation lifecycle (implicit create, (tenant, user) scope) → Tasks 9, 14, 15, 16. ✓
+  - A.3 conversation lifecycle (implicit create, (tenant, user) scope) → Tasks 9, 14, 15, 16; UI list/retomada/delete in Task 20. ✓
   - A.4 session GC, refresh path, DELETE → partially: TTL via Task 7; DELETE /sessions/{id} **deferred to Fatia 2** (no public `POST /sessions` to pair with). Demo refresh = re-fetch `/demo/jwt`. ✓
 - **Cluster B — JWT keys** → Task 6 implements `current`/`previous` with `kid`; env in Task 3. ✓
 - **Cluster C — Storage** → Tasks 8–10 cover hot SQLite. Flush/cold/recovery **deferred to Fatia 2**. `flushed_at` column exists. ✓
 - **Cluster D — Tool loop** → Streaming via Task 15. Parallelism/loop limits/MCP 401 stale path **deferred to Fatia 3** (no tools yet). Cancellation supported (AbortSignal passed). ✓
 - **Cluster E — RAG** → entirely deferred to Fatia 4. ✓
-- **Cluster F — postMessage** → Tasks 18, 19 implement all 5 messages. Origin validation via `parent_origin` query string. ✓
-- **Cluster G — Process/deploy** → Task 21 sets up basic shutdown. Multi-tenant DB lifecycle: trivial here (single demo tenant). Graceful flush deferred. ✓
+- **Cluster F — postMessage** → Tasks 18, 19 implement 4 of 5 messages (`ready`, `jwt`, `auth-required`, `resize`). `augchatd:fatal` defined in protocol but no Fatia 1 trigger — per spec §4.4, reserved for future incompatibility errors. ✓
+- **Cluster G — Process/deploy** → Task 22 sets up basic shutdown. Multi-tenant DB lifecycle: trivial here (single demo tenant). Graceful flush deferred. ✓
 - **Cluster H — Config** → Tasks 3, 5 cover env parsing and demo builder. Restart-only rotation = inherent. ✓
 - **Cluster I — Observability** → Task 2 logger; Task 11 `/health` + `/version`; sensitive-data exclusion is enforced by never logging request/response bodies (verified by no log statements containing such content). ✓
 
