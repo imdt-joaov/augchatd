@@ -5,7 +5,7 @@
     "": {
       "name": "augchatd-ui",
       "dependencies": {
-        "@assistant-ui/react": "latest",
+        "@assistant-ui/react": "^0.14.8",
         "@assistant-ui/react-ai-sdk": "latest",
         "@fontsource-variable/geist": "^5.2.9",
         "@fontsource/open-sans": "^5.2.7",

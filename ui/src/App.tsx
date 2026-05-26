@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bot, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   ActionBarPrimitive,
   AssistantRuntimeProvider,
@@ -6,13 +7,15 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  // useAui,
+  useAuiState,
+  useMessage,
+  useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
 import {
   AssistantChatTransport,
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
-import { useMessage } from "@assistant-ui/react";
-import type { UIMessage } from "ai";
 import { MarkdownText } from "./Markdown.tsx";
 import { ToolCallBlock, ToolGroup } from "./blocks/ToolCallBlock.tsx";
 import { SourceBlock } from "./blocks/SourceBlock.tsx";
@@ -28,18 +31,17 @@ import {
 } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  Sidebar,
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { createAuthedFetch, type AuthedFetch } from "@/lib/authedFetch";
-import { ConversationList } from "./ConversationList.tsx";
+import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
+import { createAuthedFetch, type AuthedFetch, type RefreshJwt } from "@/lib/authedFetch";
+import {
+  createHistoryAdapter,
+  createThreadListAdapter,
+} from "@/lib/threadListAdapter";
 
-interface BootState {
-  cid: string;
-  initialMessages: UIMessage[];
-}
 // CitationsPanel temporarily removed — the useThread selector returned a
 // new array each render, triggering React error #185 (max update depth).
 // Reintroduce with the imperative useThreadRuntime + subscribe pattern
@@ -73,21 +75,24 @@ const SUGGESTIONS = [
  *  - Hands the JWT to the chat runtime; on 401 the JWT is re-fetched
  *    via a second handshake (per contract-jwt-refresh, single recovery
  *    path).
+ *
+ * Thread state is owned by assistant-ui's `useRemoteThreadListRuntime`
+ * with a custom adapter that maps to augchatd's /conversations REST
+ * surface (see lib/threadListAdapter.tsx). The URL `/c/<cid>` is
+ * synchronized with the active thread's remoteId.
  */
 export default function App() {
   const [health, setHealth] = useState<HealthState | null>(null);
   const [jwtReady, setJwtReady] = useState(false);
-  const [boot, setBoot] = useState<BootState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refetchKey, setRefetchKey] = useState(0);
 
-  // jwtRef is shared by every authed request (chat transport, list
-  // sidebar, model picker, connector toggle). The handshake-driven
+  // jwtRef is shared by every authed request (chat transport, sidebar
+  // adapter, model picker, connector toggle). The handshake-driven
   // refresh updates it in place; setting state would re-render the
   // whole subtree and tear down the chat runtime.
   const jwtRef = useRef<string>("");
 
-  const refreshJwt = useCallback(async () => {
+  const refreshJwt = useCallback<RefreshJwt>(async () => {
     const { jwt, theme } = await requestJwtFromParent();
     jwtRef.current = jwt;
     applyTheme(theme);
@@ -125,10 +130,6 @@ export default function App() {
         applyTheme(theme);
         jwtRef.current = jwt;
         setJwtReady(true);
-
-        const b = await resolveBootConversation(jwt);
-        if (cancelled) return;
-        setBoot(b);
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : String(e));
@@ -139,70 +140,6 @@ export default function App() {
     };
   }, []);
 
-  const bumpRefetch = useCallback(() => {
-    setRefetchKey((k) => k + 1);
-  }, []);
-
-  const newConversation = useCallback(async () => {
-    const r = await authedFetch("/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    if (!r.ok) throw new Error(`POST /conversations HTTP ${r.status}`);
-    const { conversation_id } = (await r.json()) as { conversation_id: string };
-    setIframeRoute(`/c/${conversation_id}`);
-    setBoot({ cid: conversation_id, initialMessages: [] });
-    bumpRefetch();
-  }, [authedFetch, bumpRefetch]);
-
-  const switchConversation = useCallback(
-    async (cid: string) => {
-      const r = await authedFetch(
-        `/conversations/${encodeURIComponent(cid)}/messages`,
-      );
-      if (!r.ok) {
-        throw new Error(`GET /conversations/${cid}/messages HTTP ${r.status}`);
-      }
-      const data = (await r.json()) as {
-        messages: Array<{
-          message_id: string;
-          role: string;
-          parts: unknown;
-          metadata?: unknown;
-        }>;
-      };
-      const initialMessages: UIMessage[] = (data.messages ?? []).map((m) => ({
-        id: m.message_id,
-        role: m.role as UIMessage["role"],
-        parts: m.parts as UIMessage["parts"],
-        ...(m.metadata !== undefined && m.metadata !== null
-          ? { metadata: m.metadata as UIMessage["metadata"] }
-          : {}),
-      }));
-      setIframeRoute(`/c/${cid}`);
-      setBoot({ cid, initialMessages });
-    },
-    [authedFetch],
-  );
-
-  const deleteConversation = useCallback(
-    async (cid: string) => {
-      const r = await authedFetch(`/conversations/${encodeURIComponent(cid)}`, {
-        method: "DELETE",
-      });
-      if (!r.ok && r.status !== 404) {
-        throw new Error(`DELETE /conversations/${cid} HTTP ${r.status}`);
-      }
-      if (boot && boot.cid === cid) {
-        await newConversation();
-      } else {
-        bumpRefetch();
-      }
-    },
-    [authedFetch, boot, newConversation, bumpRefetch],
-  );
-
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-destructive">
@@ -210,7 +147,7 @@ export default function App() {
       </div>
     );
   }
-  if (!health || !jwtReady || !boot) {
+  if (!health || !jwtReady) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
         Loading…
@@ -220,34 +157,149 @@ export default function App() {
 
   return (
     <TooltipProvider>
+      <AugchatdRuntime
+        authedFetch={authedFetch}
+        jwtRef={jwtRef}
+        refreshJwt={refreshJwt}
+        health={health}
+      />
+    </TooltipProvider>
+  );
+}
+
+function AugchatdRuntime({
+  authedFetch,
+  jwtRef,
+  refreshJwt,
+  health,
+}: {
+  authedFetch: AuthedFetch;
+  jwtRef: React.MutableRefObject<string>;
+  refreshJwt: RefreshJwt;
+  health: HealthState;
+}) {
+  const adapter = useMemo(
+    () => createThreadListAdapter(authedFetch),
+    [authedFetch],
+  );
+
+  // Boot deep-link: if the URL is /c/<cid>, hand it to the runtime as
+  // the initial thread. The runtime will call adapter.fetch(<cid>) to
+  // resolve metadata; on failure it falls back to a fresh new thread,
+  // so a stale or unknown cid in the URL doesn't trap the user.
+  const initialThreadId = useMemo(() => {
+    const match = /^\/c\/([^/?#]+)/.exec(window.location.pathname);
+    return match?.[1];
+  }, []);
+
+  const runtime = useRemoteThreadListRuntime({
+    runtimeHook: () => useAugchatdChatRuntime({ authedFetch, jwtRef, refreshJwt }),
+    adapter,
+    ...(initialThreadId !== undefined ? { initialThreadId } : {}),
+  });
+
+  return (
+    <AssistantRuntimeProvider runtime={runtime}>
+      <UrlSync />
       <SidebarProvider defaultOpen className="h-full min-h-0">
-        <Sidebar collapsible="icon">
-          <ConversationList
-            authedFetch={authedFetch}
-            currentCid={boot.cid}
-            refetchKey={refetchKey}
-            onSelect={switchConversation}
-            onNew={newConversation}
-            onDelete={deleteConversation}
-          />
-        </Sidebar>
+        <ThreadListSidebar collapsible="offcanvas" />
         <SidebarInset className="flex min-h-0 flex-col">
           <header className="flex h-10 shrink-0 items-center gap-2 border-b px-2">
             <SidebarTrigger className="-ml-1" />
           </header>
           {health.mode === "demo" && <DemoBanner />}
-          <ChatRoom
-            key={boot.cid}
-            jwtRef={jwtRef}
-            authedFetch={authedFetch}
-            conversationId={boot.cid}
-            initialMessages={boot.initialMessages}
-            onFirstMessage={bumpRefetch}
-          />
+          <ChatView authedFetch={authedFetch} />
         </SidebarInset>
       </SidebarProvider>
-    </TooltipProvider>
+    </AssistantRuntimeProvider>
   );
+}
+
+/**
+ * Per-thread chat runtime hook, invoked by `useRemoteThreadListRuntime`
+ * once per mounted thread. Reads the active thread's `remoteId` (our
+ * augchatd `conversation_id`) from the outer adapter's state and hands
+ * it to `AssistantChatTransport` as `body.id`.
+ *
+ * On mount, it eagerly calls `aui.threadListItem().initialize()` so
+ * fresh local threads get a server-minted cid before the Composer
+ * activates. For threads loaded via `adapter.list()`, `initialize()`
+ * is a no-op (their `remoteId` is already populated).
+ */
+function useAugchatdChatRuntime({
+  authedFetch,
+  jwtRef,
+  refreshJwt,
+}: {
+  authedFetch: AuthedFetch;
+  jwtRef: React.MutableRefObject<string>;
+  refreshJwt: RefreshJwt;
+}) {
+  // const aui = useAui();
+  const remoteId = useAuiState((s) => s.threadListItem.remoteId);
+
+  const cidRef = useRef<string | undefined>(remoteId ?? undefined);
+  useEffect(() => {
+    cidRef.current = remoteId ?? undefined;
+  }, [remoteId]);
+
+  // useEffect(() => {
+  //   aui.threadListItem().initialize().catch(() => {
+  //     /* errors surface via the failed POST in the network log */
+  //   });
+  // }, [aui]);
+
+  const history = useMemo(
+    () => createHistoryAdapter(authedFetch, cidRef),
+    [authedFetch],
+  );
+
+  const transport = useMemo(
+    () =>
+      new AssistantChatTransport({
+        api: "/chat",
+        headers: () => ({ Authorization: `Bearer ${jwtRef.current}` }),
+        fetch: async (input, init) => {
+          const r = await fetch(input, init);
+          if (r.status !== 401) return r;
+          try {
+            const { jwt } = await refreshJwt();
+            jwtRef.current = jwt;
+          } catch {
+            return r;
+          }
+          const retriedHeaders = new Headers(init?.headers);
+          retriedHeaders.set("Authorization", `Bearer ${jwtRef.current}`);
+          return fetch(input, { ...init, headers: retriedHeaders });
+        },
+        // Override `body.id` to use OUR conversation_id (the active
+        // thread's remoteId from the outer RemoteThreadList adapter)
+        // instead of the assistant-ui-internal threadListItem.id.
+        // assistant-ui's id stays client-local; the server sees only
+        // our cid, which is what the SQLite row keys on.
+        prepareSendMessagesRequest: ({ messages, trigger, messageId }) => ({
+          body: { id: cidRef.current, messages, trigger, messageId },
+        }),
+      }),
+    [jwtRef, refreshJwt],
+  );
+
+  return useChatRuntime({ transport, adapters: { history } });
+}
+
+/**
+ * Mirrors the active thread's `remoteId` into the URL (`/c/<cid>`) and
+ * forwards the path to the parent frame via postMessage. Replaces the
+ * `setIframeRoute` calls that used to live alongside POST /conversations
+ * in the old App boot.
+ */
+function UrlSync() {
+  const remoteId = useAuiState((s) => s.threadListItem.remoteId);
+  useEffect(() => {
+    if (!remoteId) return;
+    setIframeRoute(`/c/${remoteId}`);
+  }, [remoteId]);
+  return null;
 }
 
 function DemoBanner() {
@@ -256,66 +308,6 @@ function DemoBanner() {
       Demo session — not authenticated
     </div>
   );
-}
-
-/**
- * Resolve which conversation_id to use on boot, hydrating server-side
- * messages when possible. URL convention: `/c/<conversation_id>`.
- *
- *   no path / unknown cid → mint a fresh conversation, replaceState
- *   /c/<cid> with messages → hydrate
- *   /c/<cid> with 404      → mint fresh + replaceState
- *
- * Auth boundary is implicit: the per-(tenant, user) SQLite partition
- * makes cids from other users resolve to `conversation_not_found`. No
- * extra check needed here.
- */
-async function resolveBootConversation(jwt: string): Promise<BootState> {
-  const match = /^\/c\/([^/?#]+)/.exec(window.location.pathname);
-  const urlCid = match?.[1];
-
-  if (urlCid) {
-    const r = await fetch(`/conversations/${encodeURIComponent(urlCid)}/messages`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    if (r.ok) {
-      const data = (await r.json()) as {
-        messages: Array<{
-          message_id: string;
-          role: string;
-          parts: unknown;
-          metadata?: unknown;
-        }>;
-      };
-      const initialMessages: UIMessage[] = (data.messages ?? []).map((m) => ({
-        id: m.message_id,
-        role: m.role as UIMessage["role"],
-        parts: m.parts as UIMessage["parts"],
-        // metadata is what carries the per-message {augchatd: {model_id, provider}}
-        // emitted by chat.ts's messageMetadata callback. Hydrating it lets the
-        // assistant-message chip work after a page reload.
-        ...(m.metadata !== undefined && m.metadata !== null
-          ? { metadata: m.metadata as UIMessage["metadata"] }
-          : {}),
-      }));
-      return { cid: urlCid, initialMessages };
-    }
-    // 404 (or other) — fall through to mint fresh.
-  }
-
-  // Mint via POST /conversations. Server returns a UUID.
-  const r = await fetch("/conversations", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      "Content-Type": "application/json",
-    },
-    body: "{}",
-  });
-  if (!r.ok) throw new Error(`POST /conversations HTTP ${r.status}`);
-  const { conversation_id } = (await r.json()) as { conversation_id: string };
-  setIframeRoute(`/c/${conversation_id}`);
-  return { cid: conversation_id, initialMessages: [] };
 }
 
 /** Update the iframe's route and notify the parent so it can mirror the path. */
@@ -373,87 +365,21 @@ function applyTheme(theme: "light" | "dark" | undefined): void {
   }
 }
 
-function ChatRoom({
-  jwtRef,
-  authedFetch,
-  conversationId,
-  initialMessages,
-  onFirstMessage,
-}: {
-  jwtRef: React.MutableRefObject<string>;
-  authedFetch: AuthedFetch;
-  conversationId: string;
-  initialMessages: UIMessage[];
-  onFirstMessage: () => void;
-}) {
-  const transport = useMemo(
-    () =>
-      new AssistantChatTransport({
-        api: "/chat",
-        headers: () => ({ Authorization: `Bearer ${jwtRef.current}` }),
-        fetch: async (input, init) => {
-          const r = await fetch(input, init);
-          if (r.status !== 401) return r;
-          try {
-            const { jwt, theme } = await requestJwtFromParent();
-            jwtRef.current = jwt;
-            applyTheme(theme);
-          } catch {
-            return r;
-          }
-          const retriedHeaders = new Headers(init?.headers);
-          retriedHeaders.set("Authorization", `Bearer ${jwtRef.current}`);
-          return fetch(input, { ...init, headers: retriedHeaders });
-        },
-        // Override `body.id` to use OUR conversation_id (the one in
-        // the URL / hydrated from POST /conversations) instead of the
-        // assistant-ui-internal threadListItem.id. assistant-ui's id
-        // stays client-local; the server sees only our cid, which is
-        // what the SQLite row keys on.
-        prepareSendMessagesRequest: ({ messages, trigger, messageId }) => ({
-          body: { id: conversationId, messages, trigger, messageId },
-        }),
-      }),
-    [conversationId],
-  );
-
-  const runtime = useChatRuntime({ transport, messages: initialMessages });
-
-  // The server-derived conversation title comes from the first user
-  // message (deriveTitle in conversation-registry.ts). Fire once per
-  // mount, on the 0→≥1 transition of thread.messages, so the parent's
-  // sidebar list refetches and shows the freshly-minted title without
-  // waiting on the next user action.
-  const firedFirstMessageRef = useRef(false);
-  useEffect(() => {
-    firedFirstMessageRef.current = initialMessages.length > 0;
-    const unsubscribe = runtime.thread.subscribe(() => {
-      if (firedFirstMessageRef.current) return;
-      const count = runtime.thread.getState().messages.length;
-      if (count >= 1) {
-        firedFirstMessageRef.current = true;
-        onFirstMessage();
-      }
-    });
-    return unsubscribe;
-  }, [runtime, initialMessages, onFirstMessage]);
-
+function ChatView({ authedFetch }: { authedFetch: AuthedFetch }) {
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-        <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 py-8">
-            <ThreadPrimitive.Empty>
-              <EmptyState />
-            </ThreadPrimitive.Empty>
-            <ThreadPrimitive.Messages
-              components={{ UserMessage, AssistantMessage }}
-            />
-          </div>
-        </ThreadPrimitive.Viewport>
-        <Composer conversationId={conversationId} authedFetch={authedFetch} />
-      </ThreadPrimitive.Root>
-    </AssistantRuntimeProvider>
+    <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
+      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 py-8">
+          <ThreadPrimitive.Empty>
+            <EmptyState />
+          </ThreadPrimitive.Empty>
+          <ThreadPrimitive.Messages
+            components={{ UserMessage, AssistantMessage }}
+          />
+        </div>
+      </ThreadPrimitive.Viewport>
+      <Composer authedFetch={authedFetch} />
+    </ThreadPrimitive.Root>
   );
 }
 
@@ -538,7 +464,7 @@ function AssistantMessage() {
 /**
  * Per-assistant-message provenance chip. Reads the model_id stamped by
  * the chat backend's `messageMetadata` callback (chat.ts) via
- * `useMessage` — surfaces a small "🤖 gpt-5-mini" label so a user who
+ * `useMessage` — surfaces a small "Bot icon + gpt-5-mini" label so a user who
  * switched models mid-conversation can tell which model produced each
  * reply. Renders nothing if the metadata is absent (e.g. messages
  * stored before this column was added).
@@ -554,7 +480,7 @@ function ModelChip() {
     <Tooltip>
       <TooltipTrigger asChild>
         <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
-          <span aria-hidden>🤖</span>
+          <Bot className="size-3" aria-hidden />
           <span className="font-mono">{modelId}</span>
         </Badge>
       </TooltipTrigger>
@@ -637,7 +563,7 @@ function BranchPicker() {
     >
       <BranchPickerPrimitive.Previous asChild>
         <Button variant="ghost" size="icon-xs" aria-label="Previous branch">
-          ←
+          <ChevronLeft className="size-3.5" />
         </Button>
       </BranchPickerPrimitive.Previous>
       <span className="tabular-nums">
@@ -645,24 +571,22 @@ function BranchPicker() {
       </span>
       <BranchPickerPrimitive.Next asChild>
         <Button variant="ghost" size="icon-xs" aria-label="Next branch">
-          →
+          <ChevronRight className="size-3.5" />
         </Button>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>
   );
 }
 
-function Composer({
-  conversationId,
-  authedFetch,
-}: {
-  conversationId: string;
-  authedFetch: AuthedFetch;
-}) {
-  // conversationId comes from the URL (/c/<cid>) via App → ChatRoom →
-  // here. The chat transport's prepareSendMessagesRequest also uses
-  // this same id as body.id, so toolbar GET/PUT and /chat hit the
-  // same SQLite row.
+function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
+  // conversationId comes from the active thread's remoteId (our cid,
+  // populated by adapter.initialize() / adapter.list()). The chat
+  // transport's prepareSendMessagesRequest also uses this same id as
+  // body.id, so toolbar GET/PUT and /chat hit the same SQLite row.
+  // While remoteId is still resolving (rare — eager initialize in
+  // useAugchatdChatRuntime makes this ~1 tick), the per-conversation
+  // menus stay hidden so they don't fire PUTs against undefined.
+  const conversationId = useAuiState((s) => s.threadListItem.remoteId);
   return (
     <div className="border-t bg-background">
       <div className="mx-auto w-full max-w-[44rem] px-4 pb-3 pt-3">
@@ -676,8 +600,12 @@ function Composer({
             />
           </ComposerPrimitive.Input>
           <div className="flex items-center gap-2">
-            <ComposerOptionsMenu conversationId={conversationId} authedFetch={authedFetch} />
-            <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
+            {conversationId && (
+              <>
+                <ComposerOptionsMenu conversationId={conversationId} authedFetch={authedFetch} />
+                <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
+              </>
+            )}
             <ComposerPrimitive.Send asChild>
               <Button size="sm" className="ml-auto">
                 Send
