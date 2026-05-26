@@ -7,6 +7,9 @@ evidence:
     section: "listConversationMessagesHandler — 200 / 404 / 400"
   - source: src/conversation-registry.ts@ca3458a
     section: "listMessages — SELECT ordered by ordinal, parts_json + metadata_json parsed back"
+  - id: code-ptr-ui-conversation-switch
+    source: spec/src/evidence/code-pointers/ui-conversation-switch.md
+    section: "Bundled SPA switchConversation action (sidebar row click hydrates the chat runtime)"
 ---
 
 # Technical contract — `GET /conversations/:conversation_id/messages`

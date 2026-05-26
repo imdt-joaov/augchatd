@@ -7,6 +7,9 @@ evidence:
     section: "listConversationsHandler"
   - source: src/conversation-registry.ts@3e50c1c
     section: "listConversations — SQL with first_user_parts subselect + deriveTitle"
+  - id: code-ptr-ui-conversation-list
+    source: spec/src/evidence/code-pointers/ui-conversation-list.md
+    section: "Bundled SPA sidebar consumer (fetch + render)"
 links:
   - relation: supports
     target: contract-storage-hot

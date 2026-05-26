@@ -7,6 +7,9 @@ evidence:
     section: "deleteConversationHandler"
   - source: src/conversation-registry.ts@3e50c1c
     section: "deleteConversation — cascade DELETE in a single transaction"
+  - id: code-ptr-ui-conversation-delete
+    source: spec/src/evidence/code-pointers/ui-conversation-delete.md
+    section: "Bundled SPA deleteConversation action (per-row ✕ in the sidebar)"
 links:
   - relation: supports
     target: contract-storage-hot

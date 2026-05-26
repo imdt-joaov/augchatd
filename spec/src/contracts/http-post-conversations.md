@@ -7,6 +7,9 @@ evidence:
     section: "createConversationHandler — optional client id, hot-write, 201 body"
   - source: src/conversation-registry.ts@ca3458a
     section: "createConversation — single transaction: INSERT conversation + snapshotDefaultsTx"
+  - id: code-ptr-ui-conversation-new
+    source: spec/src/evidence/code-pointers/ui-conversation-new.md
+    section: "Bundled SPA newConversation action (sidebar '+ Nova' button)"
 links:
   - relation: supports
     target: contract-connector-toggle
