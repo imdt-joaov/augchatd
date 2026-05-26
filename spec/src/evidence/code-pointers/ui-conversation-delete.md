@@ -3,7 +3,7 @@ id: code-ptr-ui-conversation-delete
 type: evidence
 status: current
 source_kind: code
-ref: "ui/src/App.tsx:deleteConversation@87a4d97"
+ref: "ui/src/App.tsx:deleteConversation@f7675bc"
 proves: technical-contract-http-delete-conversations-cid
 ---
 

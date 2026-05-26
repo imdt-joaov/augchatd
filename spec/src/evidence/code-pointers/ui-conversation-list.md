@@ -3,7 +3,7 @@ id: code-ptr-ui-conversation-list
 type: evidence
 status: current
 source_kind: code
-ref: "ui/src/ConversationList.tsx:36-55@87a4d97"
+ref: "ui/src/ConversationList.tsx:46-65@f7675bc"
 proves: technical-contract-http-get-conversations
 ---
 

@@ -3,7 +3,7 @@ id: code-ptr-ui-conversation-new
 type: evidence
 status: current
 source_kind: code
-ref: "ui/src/App.tsx:newConversation@87a4d97"
+ref: "ui/src/App.tsx:newConversation@f7675bc"
 proves: technical-contract-http-post-conversations
 ---
 

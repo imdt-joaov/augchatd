@@ -3,7 +3,7 @@ id: code-ptr-ui-conversation-switch
 type: evidence
 status: current
 source_kind: code
-ref: "ui/src/App.tsx:switchConversation@87a4d97"
+ref: "ui/src/App.tsx:switchConversation@f7675bc"
 proves: technical-contract-http-get-conversation-messages
 ---
 
