@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FileText, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -39,7 +40,7 @@ export function SourceBlock(props: SourceProps) {
     return (
       <Button asChild variant="secondary" size="sm" className="my-1 mr-1 inline-flex max-w-full align-top">
         <a href={props.url} target="_blank" rel="noreferrer noopener">
-          <span aria-hidden>🔗</span>
+          <Link2 className="size-3.5" aria-hidden />
           <span className="truncate">{props.title ?? props.url}</span>
         </a>
       </Button>
@@ -64,7 +65,7 @@ export function SourceBlock(props: SourceProps) {
           size="sm"
           className="h-auto justify-start rounded-none px-2 py-1 font-normal"
         >
-          <span aria-hidden className="mr-1">📄</span>
+          <FileText className="mr-1 size-3.5" aria-hidden />
           <span className="font-medium">{props.title}</span>
           {meta.source_descriptive_id && (
             <span className="ml-2 text-muted-foreground">

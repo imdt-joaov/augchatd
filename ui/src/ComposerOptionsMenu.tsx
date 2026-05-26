@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Brain, ChevronDown, Scale, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -134,18 +135,18 @@ export function ComposerOptionsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" aria-label="Composer options">
-          <span aria-hidden>⚡</span>
+          <Zap className="size-3.5" aria-hidden />
           <span className="max-w-[160px] truncate">
             {currentModel?.display_name ?? currentModelId ?? "Model…"}
           </span>
-          <span aria-hidden className="text-muted-foreground">▾</span>
+          <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" side="top" className="w-56">
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
-            <span aria-hidden className="mr-2">⚖</span>
+            <Scale className="mr-2 size-4" aria-hidden />
             <span>Model</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-72 max-h-80 overflow-y-auto">
@@ -189,7 +190,7 @@ export function ComposerOptionsMenu({
             className="flex items-center justify-between gap-2"
           >
             <span className="flex items-center gap-2">
-              <span aria-hidden>🧠</span>
+              <Brain className="size-4" aria-hidden />
               <span>Reasoning</span>
             </span>
             <Switch checked={reasoningEnabled} aria-label="Toggle reasoning" />

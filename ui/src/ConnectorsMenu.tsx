@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -75,7 +76,7 @@ export function ConnectorsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="sm" aria-label="Toggle connectors">
-          <span aria-hidden>🛠</span>
+          <Wrench className="size-3.5" aria-hidden />
           <span>Tools{items ? ` ${activeCount}/${totalCount}` : ""}</span>
         </Button>
       </DropdownMenuTrigger>

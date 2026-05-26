@@ -1,4 +1,5 @@
 import { Children, useState, type PropsWithChildren } from "react";
+import { Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +36,7 @@ export function ToolCallBlock(props: ToolCallBlockProps) {
           className="h-auto w-full justify-between rounded-none px-2.5 py-1 font-mono text-[12px] font-normal data-[state=open]:border-b"
         >
           <span className="flex items-center gap-1.5">
-            <span aria-hidden>🔧</span>
+            <Wrench className="size-3.5" aria-hidden />
             <span>{tool}</span>
             {connector && <span className="text-muted-foreground">({connector})</span>}
           </span>
@@ -82,7 +83,7 @@ export function ToolGroup({
           className="h-auto w-full justify-between rounded-none px-2.5 py-1.5 text-[12px] font-normal"
         >
           <span className="flex items-center gap-1.5 font-mono">
-            <span aria-hidden>🔧</span>
+            <Wrench className="size-3.5" aria-hidden />
             <span>{count} tool calls</span>
           </span>
           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
