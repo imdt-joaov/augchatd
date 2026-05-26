@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import {
+  SidebarContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuAction,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+} from "@/components/ui/sidebar";
 import type { AuthedFetch } from "@/lib/authedFetch";
 
 export interface ConversationListItem {
@@ -55,20 +64,40 @@ export function ConversationList({
   }, [authedFetch, refetchKey, attempt]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between px-3 pt-3 pb-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Conversas
-        </span>
-        <Button size="sm" variant="ghost" onClick={onNew}>
-          + Nova
-        </Button>
-      </div>
-      <Separator />
-      <div className="flex-1 overflow-y-auto px-2 py-2">
-        {conversations === null && !error && <LoadingSkeleton />}
+    <>
+      <SidebarHeader>
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground group-data-[collapsible=icon]:hidden">
+            Conversas
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onNew}
+            aria-label="Nova conversa"
+            className="ml-auto"
+          >
+            <Plus className="size-4" />
+            <span className="group-data-[collapsible=icon]:hidden">Nova</span>
+          </Button>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        {conversations === null && !error && (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton />
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton />
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuSkeleton />
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
         {error && (
-          <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-destructive">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-destructive group-data-[collapsible=icon]:hidden">
             <span>Erro ao listar.</span>
             <Button
               variant="ghost"
@@ -80,36 +109,29 @@ export function ConversationList({
           </div>
         )}
         {conversations && conversations.length === 0 && !error && (
-          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
             Nenhuma conversa ainda.
           </div>
         )}
-        {conversations &&
-          conversations.map((c) => (
-            <ConversationRow
-              key={c.conversation_id}
-              item={c}
-              active={c.conversation_id === currentCid}
-              onSelect={onSelect}
-              onDelete={onDelete}
-            />
-          ))}
-      </div>
-    </div>
+        {conversations && conversations.length > 0 && (
+          <SidebarMenu>
+            {conversations.map((c) => (
+              <ConversationItem
+                key={c.conversation_id}
+                item={c}
+                active={c.conversation_id === currentCid}
+                onSelect={onSelect}
+                onDelete={onDelete}
+              />
+            ))}
+          </SidebarMenu>
+        )}
+      </SidebarContent>
+    </>
   );
 }
 
-function LoadingSkeleton() {
-  return (
-    <div>
-      <div className="h-10 animate-pulse rounded bg-muted/50" />
-      <div className="mt-1 h-10 animate-pulse rounded bg-muted/50" />
-      <div className="mt-1 h-10 animate-pulse rounded bg-muted/50" />
-    </div>
-  );
-}
-
-function ConversationRow({
+function ConversationItem({
   item,
   active,
   onSelect,
@@ -121,54 +143,45 @@ function ConversationRow({
   onDelete: (cid: string) => void;
 }) {
   const cid = item.conversation_id;
+  const label = item.title ?? "Sem título";
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(cid)}
-      aria-current={active ? "page" : undefined}
-      className={
-        "group/row mt-0.5 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors " +
-        (active
-          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-          : "hover:bg-sidebar-accent/50")
-      }
-    >
-      <div className="min-w-0 flex-1">
-        {item.title ? (
-          <div className="truncate text-sm">{item.title}</div>
-        ) : (
-          <div className="truncate text-sm italic text-muted-foreground">
-            Sem título
-          </div>
-        )}
-        <div className="text-[11px] text-muted-foreground">
-          {relativeTime(item.updated_at)}
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        {...(active ? { isActive: true } : {})}
+        aria-current={active ? "page" : undefined}
+        onClick={() => onSelect(cid)}
+        tooltip={label}
+        className="h-auto items-start py-2"
+      >
+        <div className="flex min-w-0 flex-col">
+          <span
+            className={
+              item.title
+                ? "truncate"
+                : "truncate italic text-muted-foreground"
+            }
+          >
+            {label}
+          </span>
+          <span className="truncate text-[11px] text-muted-foreground">
+            {relativeTime(item.updated_at)}
+          </span>
         </div>
-      </div>
-      <span
-        role="button"
-        tabIndex={0}
+      </SidebarMenuButton>
+      <SidebarMenuAction
+        showOnHover
         aria-label="Excluir conversa"
         onClick={(e) => {
           e.stopPropagation();
           if (window.confirm("Excluir esta conversa?")) onDelete(cid);
         }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            e.stopPropagation();
-            if (window.confirm("Excluir esta conversa?")) onDelete(cid);
-          }
-        }}
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive focus:opacity-100 focus:outline-none group-hover/row:opacity-100"
       >
-        ✕
-      </span>
-    </button>
+        <X />
+      </SidebarMenuAction>
+    </SidebarMenuItem>
   );
 }
 
-/** ISO timestamp → short relative string ("há 5 min", "há 2 d"). */
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";

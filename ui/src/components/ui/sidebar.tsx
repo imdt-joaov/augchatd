@@ -503,12 +503,16 @@ function SidebarMenuButton({
   const Comp = asChild ? Slot.Root : "button"
   const { isMobile, state } = useSidebar()
 
+  // data-active is omitted when isActive is false because the Tailwind v4
+  // `data-active:` modifier matches attribute presence, not its truthy
+  // value (shadcn-ui/ui#9134). Without this, every row would render in
+  // the active style.
   const button = (
     <Comp
       data-slot="sidebar-menu-button"
       data-sidebar="menu-button"
       data-size={size}
-      data-active={isActive}
+      data-active={isActive ? true : undefined}
       className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
       {...props}
     />
