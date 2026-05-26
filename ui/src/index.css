@@ -117,8 +117,27 @@
 }
 
 @layer base {
+  ::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    border-radius: 5px;
+  }
+
   * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
     @apply border-border outline-ring/50;
+  }
+  
+  html, body, #root {
+    @apply h-full;
     }
   body {
     @apply bg-background text-foreground;
