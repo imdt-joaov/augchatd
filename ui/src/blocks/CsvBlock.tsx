@@ -12,7 +12,7 @@ export function CsvBlock({ raw }: { raw: string }) {
   if (rows.length === 0) {
     return (
       <CodeBlockShell language="csv" rawCode={raw}>
-        <pre className="p-3 text-fg-muted">(empty)</pre>
+        <pre className="p-3 text-muted-foreground">(empty)</pre>
       </CodeBlockShell>
     );
   }
@@ -27,7 +27,7 @@ export function CsvBlock({ raw }: { raw: string }) {
               {header.map((cell, i) => (
                 <th
                   key={i}
-                  className="border-b border-border bg-bg-mid px-3 py-2 text-left font-semibold"
+                  className="border-b bg-muted px-3 py-2 text-left font-semibold"
                 >
                   {cell}
                 </th>
@@ -40,7 +40,7 @@ export function CsvBlock({ raw }: { raw: string }) {
                 {row.map((cell, ci) => (
                   <td
                     key={ci}
-                    className="border-b border-border px-3 py-1.5 align-top"
+                    className="border-b px-3 py-1.5 align-top"
                   >
                     {cell}
                   </td>

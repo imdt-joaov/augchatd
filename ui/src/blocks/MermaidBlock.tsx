@@ -57,12 +57,12 @@ export function MermaidBlock({ chart }: { chart: string }) {
 
   if (error) {
     return (
-      <div className="my-3 rounded-lg border border-warn-border bg-warn-bg p-3 text-warn-fg">
+      <div className="my-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-destructive">
         <div className="mb-1 text-xs font-semibold uppercase tracking-wider">
           Mermaid render error
         </div>
         <pre className="overflow-x-auto whitespace-pre-wrap text-xs">{error}</pre>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-fg-muted">
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
           {chart}
         </pre>
       </div>
@@ -71,7 +71,7 @@ export function MermaidBlock({ chart }: { chart: string }) {
 
   if (!svg) {
     return (
-      <div className="my-3 rounded-lg border border-border bg-bg-soft p-3 text-fg-muted">
+      <div className="my-3 rounded-lg border bg-muted p-3 text-muted-foreground">
         Rendering diagram…
       </div>
     );
@@ -80,7 +80,7 @@ export function MermaidBlock({ chart }: { chart: string }) {
   return (
     <div
       ref={containerRef}
-      className="my-3 flex justify-center overflow-x-auto rounded-lg border border-border bg-bg-soft p-3"
+      className="my-3 flex justify-center overflow-x-auto rounded-lg border bg-muted p-3"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

@@ -1,100 +1,132 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-@layer base {
-  /* Default = LIGHT theme. Opt-in to dark by setting
-     `data-theme="dark"` on the document root (App.tsx does this when
-     the session config says `theme: "dark"`). Tailwind theme tokens
-     reference `rgb(var(--…) / <alpha>)` so swapping these vars
-     re-skins everything that uses bg-/fg-/border-/accent-/warn-
-     utilities. */
-  :root {
-    color-scheme: light;
-    --bg-base: 252 252 253;
-    --bg-soft: 244 244 246;
-    --bg-mid: 230 230 234;
-    --fg-base: 17 17 22;
-    --fg-muted: 102 102 110;
-    --accent: 46 96 220;
-    --warn-bg: 255 240 240;
-    --warn-fg: 153 56 56;
-    --warn-border: 230 180 180;
-    --border: 215 215 220;
-  }
+@custom-variant dark (&:is(.dark *));
 
-  [data-theme="dark"] {
-    color-scheme: dark;
-    --bg-base: 11 11 13;
-    --bg-soft: 19 19 24;
-    --bg-mid: 28 28 36;
-    --fg-base: 233 233 239;
-    --fg-muted: 152 152 159;
-    --accent: 124 156 255;
-    --warn-bg: 42 30 30;
-    --warn-fg: 255 180 180;
-    --warn-border: 91 46 46;
-    --border: 42 42 53;
-  }
-
-  html,
-  body,
-  #root {
-    @apply h-full bg-bg-base text-fg-base font-sans antialiased;
-    font-size: 14px;
-    line-height: 1.5;
-  }
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Poppins', 'Open Sans', sans-serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@layer components {
-  /* highlight.js dark theme (github-dark-dimmed-ish) — scoped to code blocks */
-  .hljs {
-    @apply text-fg-base;
-  }
-  .hljs-comment,
-  .hljs-quote {
-    @apply text-fg-muted italic;
-  }
-  .hljs-keyword,
-  .hljs-selector-tag,
-  .hljs-literal,
-  .hljs-section,
-  .hljs-link {
-    color: #ff7b72;
-  }
-  .hljs-string,
-  .hljs-attr,
-  .hljs-template-variable,
-  .hljs-symbol,
-  .hljs-bullet,
-  .hljs-built_in {
-    color: #a5d6ff;
-  }
-  .hljs-title,
-  .hljs-name,
-  .hljs-meta {
-    color: #d2a8ff;
-  }
-  .hljs-number,
-  .hljs-class,
-  .hljs-attribute,
-  .hljs-variable,
-  .hljs-tag,
-  .hljs-regexp {
-    color: #ffa657;
-  }
-  .hljs-deletion {
-    color: #ffa198;
-    background: #67060c;
-  }
-  .hljs-addition {
-    color: #aff5b4;
-    background: #033a16;
-  }
-  .hljs-emphasis {
-    @apply italic;
-  }
-  .hljs-strong {
-    @apply font-bold;
+:root {
+    --background: #ffffff;
+    --foreground: #213445;
+    --card: #ffffff;
+    --card-foreground: #213445;
+    --popover: #ffffff;
+    --popover-foreground: #213445;
+    --primary: #149FD9;
+    --primary-foreground: #ffffff;
+    --secondary: #edf5f8;
+    --secondary-foreground: #3b5c7a;
+    --muted: #f8fafc;
+    --muted-foreground: #9DADBC;
+    --accent: #edf5f8;
+    --accent-foreground: #213445;
+    --destructive: #ff507a;
+    --border: #EEF0F7;
+    --input: #EEF0F7;
+    --ring: #149FD9;
+    --chart-1: #149FD9;
+    --chart-2: #31c440;
+    --chart-3: #ffc400;
+    --chart-4: #ff507a;
+    --chart-5: #9DADBC;
+    --radius: 0.625rem;
+    --sidebar: #ffffff;
+    --sidebar-foreground: #213445;
+    --sidebar-primary: #149FD9;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #edf5f8;
+    --sidebar-accent-foreground: #213445;
+    --sidebar-border: #EEF0F7;
+    --sidebar-ring: #149FD9;
+}
+
+.dark {
+    --background: #14171c;
+    --foreground: #f4f5f7;
+    --card: #232830;
+    --card-foreground: #f4f5f7;
+    --popover: #232830;
+    --popover-foreground: #f4f5f7;
+    --primary: #149FD9;
+    --primary-foreground: #ffffff;
+    --secondary: #0f100e;
+    --secondary-foreground: #828690;
+    --muted: #0f100e;
+    --muted-foreground: #6a6a73;
+    --accent: #232830;
+    --accent-foreground: #f4f5f7;
+    --destructive: #ff507a;
+    --border: rgba(255, 255, 255, 0.08);
+    --input: rgba(255, 255, 255, 0.12);
+    --ring: #149FD9;
+    --chart-1: #149FD9;
+    --chart-2: #31c440;
+    --chart-3: #ffc400;
+    --chart-4: #ff507a;
+    --chart-5: #9DADBC;
+    --sidebar: #232830;
+    --sidebar-foreground: #f4f5f7;
+    --sidebar-primary: #149FD9;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #14171c;
+    --sidebar-accent-foreground: #f4f5f7;
+    --sidebar-border: rgba(255, 255, 255, 0.08);
+    --sidebar-ring: #149FD9;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+  button {
+    @apply cursor-pointer
   }
 }

@@ -1,22 +1,12 @@
-import { Children, type PropsWithChildren } from "react";
-
-/**
- * Tool-call rendering, two-tier collapse:
- *
- * 1. `ToolGroup` wraps N consecutive tool calls.
- *    - N === 1 → transparent passthrough (no group UI; the single pill
- *      stands on its own).
- *    - N >= 2 → `<details>` collapsible: summary "🔧 3 tool calls" plus
- *      the rolled-up status of the group; expanded shows each child
- *      pill stacked.
- *
- * 2. `ToolCallBlock` is the per-call pill.
- *    Default state: a single line — `🔧 <tool> (<connector>) · Done`.
- *    Click expands: arguments + result.
- *
- * Two clicks to drill from a many-call message into the JSON of one
- * specific call. Quiet by default; full detail on demand.
- */
+import { Children, useState, type PropsWithChildren } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 
 interface ToolCallBlockProps {
   toolCallId: string;
@@ -31,82 +21,105 @@ export function ToolCallBlock(props: ToolCallBlockProps) {
   const { connector, tool } = splitToolName(props.toolName);
   const hasResult = props.result !== undefined;
   const status: Status = props.isError ? "error" : hasResult ? "done" : "running";
+  const [open, setOpen] = useState(false);
 
   return (
-    <details className="my-1 rounded border border-border bg-bg-base [&[open]>summary]:border-b [&[open]>summary]:border-border">
-      <summary className="flex cursor-pointer items-center justify-between px-2.5 py-1 text-[12px] font-mono hover:bg-bg-soft">
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden>🔧</span>
-          <span>{tool}</span>
-          {connector && <span className="text-fg-muted">({connector})</span>}
-        </span>
-        <StatusDot status={status} />
-      </summary>
-      <div className="px-2.5 py-2 text-[12px]">
-        <div className="mb-0.5 font-mono uppercase tracking-wider text-[10px] text-fg-muted">
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="my-1 rounded border bg-background"
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          className="h-auto w-full justify-between rounded-none px-2.5 py-1 font-mono text-[12px] font-normal data-[state=open]:border-b"
+        >
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden>🔧</span>
+            <span>{tool}</span>
+            {connector && <span className="text-muted-foreground">({connector})</span>}
+          </span>
+          <StatusPill status={status} />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-2.5 py-2 text-[12px]">
+        <div className="mb-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           Arguments
         </div>
-        <pre className="mb-2 overflow-x-auto font-mono text-[11px] text-fg-base">
+        <pre className="mb-2 overflow-x-auto font-mono text-[11px] text-foreground">
           {formatJson(props.args ?? safeJsonParse(props.argsText))}
         </pre>
         {hasResult && (
           <>
-            <div className="mb-0.5 font-mono uppercase tracking-wider text-[10px] text-fg-muted">
+            <div className="mb-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               Result
             </div>
-            <pre className="overflow-x-auto font-mono text-[11px] text-fg-base">
+            <pre className="overflow-x-auto font-mono text-[11px] text-foreground">
               {formatResult(props.result)}
             </pre>
           </>
         )}
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
-/**
- * Wraps consecutive tool calls.
- *
- * For a single call, renders the child pill directly so the user sees
- * just `🔧 toolName · Done` inline. For 2+ calls, wraps in one
- * collapsible: `🔧 N tool calls` with the children stacked inside.
- */
 export function ToolGroup({
   children,
 }: PropsWithChildren<{ startIndex: number; endIndex: number }>) {
   const count = Children.count(children);
+  const [open, setOpen] = useState(false);
   if (count <= 1) return <>{children}</>;
   return (
-    <details className="my-2 rounded border border-border bg-bg-soft">
-      <summary className="flex cursor-pointer items-center justify-between px-2.5 py-1.5 text-[12px] hover:bg-bg-mid">
-        <span className="flex items-center gap-1.5 font-mono">
-          <span aria-hidden>🔧</span>
-          <span>{count} tool calls</span>
-        </span>
-        <span className="font-mono text-[10px] uppercase tracking-wider text-fg-muted">
-          tap to expand
-        </span>
-      </summary>
-      <div className="space-y-1 border-t border-border px-2.5 py-2">
-        {children}
-      </div>
-    </details>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="my-2 rounded border bg-muted"
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          className="h-auto w-full justify-between rounded-none px-2.5 py-1.5 text-[12px] font-normal"
+        >
+          <span className="flex items-center gap-1.5 font-mono">
+            <span aria-hidden>🔧</span>
+            <span>{count} tool calls</span>
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            tap to expand
+          </span>
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <Separator />
+        <div className="space-y-1 px-2.5 py-2">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
 type Status = "running" | "error" | "done";
 
-function StatusDot({ status }: { status: Status }) {
-  const cls = {
-    running: "bg-fg-muted animate-pulse",
-    error: "bg-warn-fg",
-    done: "bg-accent",
-  }[status];
+function StatusPill({ status }: { status: Status }) {
+  if (status === "running") {
+    return (
+      <Badge variant="secondary" className="gap-1.5 text-[10px] uppercase tracking-wider">
+        Running
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
+      </Badge>
+    );
+  }
+  if (status === "error") {
+    return (
+      <Badge variant="destructive" className="text-[10px] uppercase tracking-wider">
+        Error
+      </Badge>
+    );
+  }
   return (
-    <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-fg-muted">
-      {status === "done" ? "Done" : status === "error" ? "Error" : "Running"}
-      <span className={`h-1.5 w-1.5 rounded-full ${cls}`} />
-    </span>
+    <Badge className="text-[10px] uppercase tracking-wider">
+      Done
+    </Badge>
   );
 }
 

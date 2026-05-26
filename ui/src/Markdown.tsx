@@ -86,11 +86,11 @@ export function MarkdownText({ text }: { text: string }) {
         [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-6
         [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-6
         [&_li]:my-0.5
-        [&_a]:text-accent [&_a]:underline-offset-2 hover:[&_a]:underline
-        [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-fg-muted
-        [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-bg-mid [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:text-[0.9em] [&_:not(pre)>code]:font-mono
+        [&_a]:text-primary [&_a]:underline-offset-2 hover:[&_a]:underline
+        [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground
+        [&_:not(pre)>code]:rounded [&_:not(pre)>code]:bg-muted [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:text-[0.9em] [&_:not(pre)>code]:font-mono
         [&_table]:my-3 [&_table]:border-collapse [&_table]:text-[0.95em]
-        [&_th]:border [&_th]:border-border [&_th]:bg-bg-soft [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left
+        [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left
         [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-1.5
         [&_hr]:my-4 [&_hr]:border-border
         [&_img]:my-3 [&_img]:max-w-full [&_img]:rounded-lg

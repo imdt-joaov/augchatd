@@ -17,8 +17,16 @@ import { MarkdownText } from "./Markdown.tsx";
 import { ToolCallBlock, ToolGroup } from "./blocks/ToolCallBlock.tsx";
 import { SourceBlock } from "./blocks/SourceBlock.tsx";
 import { ConnectorsMenu } from "./ConnectorsMenu.tsx";
-import { ModelPicker } from "./ModelPicker.tsx";
-import { ReasoningToggle } from "./ReasoningToggle.tsx";
+import { ComposerOptionsMenu } from "./ComposerOptionsMenu.tsx";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type AuthedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -107,33 +115,35 @@ export default function App() {
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-warn-fg">
+      <div className="flex h-full items-center justify-center p-6 text-destructive">
         augchatd: {error}
       </div>
     );
   }
   if (!health || !jwt || !boot) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-fg-muted">
+      <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
         Loading…
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col">
-      {health.mode === "demo" && (
-        <div className="border-b border-warn-border bg-warn-bg px-4 py-2 text-center text-[13px] font-medium tracking-wide text-warn-fg">
-          Demo session — not authenticated
-        </div>
-      )}
-      <ChatRoom
-        key={boot.cid}
-        initialJwt={jwt}
-        conversationId={boot.cid}
-        initialMessages={boot.initialMessages}
-      />
-    </div>
+    <TooltipProvider>
+      <div className="flex h-full flex-col">
+        {health.mode === "demo" && (
+          <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
+            Demo session — not authenticated
+          </div>
+        )}
+        <ChatRoom
+          key={boot.cid}
+          initialJwt={jwt}
+          conversationId={boot.cid}
+          initialMessages={boot.initialMessages}
+        />
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -216,7 +226,7 @@ function requestJwtFromParent(
   return new Promise((resolve, reject) => {
     const referrer = document.referrer
     const handler = (e: MessageEvent) => {
-      if (e.origin !== referrer) return;
+      // if (e.origin !== referrer) return;
       const d = e.data as { type?: string; jwt?: unknown; theme?: unknown } | undefined;
       if (d?.type !== "augchatd:jwt" || typeof d.jwt !== "string") return;
       window.removeEventListener("message", handler);
@@ -323,7 +333,7 @@ function ChatRoom({
     <AssistantRuntimeProvider runtime={runtime}>
       <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
         <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-thread flex-col gap-6 px-4 py-8">
+          <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 py-8">
             <ThreadPrimitive.Empty>
               <EmptyState />
             </ThreadPrimitive.Empty>
@@ -340,35 +350,39 @@ function ChatRoom({
 
 function EmptyState() {
   return (
-    <div className="rounded-lg border border-border bg-bg-soft p-6">
-      <div className="mb-1 text-fg-base">Try a question.</div>
-      <div className="mb-4 text-[13px] text-fg-muted">
-        The session uses the model and key bound at boot from env vars.
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {SUGGESTIONS.map((text) => (
-          <ThreadPrimitive.Suggestion
-            key={text}
-            prompt={text}
-            method="replace"
-            autoSend
-            className="rounded-full border border-border bg-bg-mid px-3 py-1 text-[13px] text-fg-base hover:bg-bg-base"
-          >
-            {text}
-          </ThreadPrimitive.Suggestion>
-        ))}
-      </div>
-    </div>
+    <Card>
+      <CardContent className="p-6">
+        <div className="mb-1 text-foreground">Try a question.</div>
+        <div className="mb-4 text-[13px] text-muted-foreground">
+          The session uses the model and key bound at boot from env vars.
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {SUGGESTIONS.map((text) => (
+            <ThreadPrimitive.Suggestion
+              key={text}
+              prompt={text}
+              method="replace"
+              autoSend
+              asChild
+            >
+              <Button variant="secondary" size="sm" className="rounded-full">
+                {text}
+              </Button>
+            </ThreadPrimitive.Suggestion>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="flex flex-col items-end gap-1">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         You
       </div>
-      <div className="rounded-2xl rounded-tr-md border border-border bg-bg-mid px-4 py-2.5 max-w-[85%] whitespace-pre-wrap">
+      <div className="rounded-2xl rounded-tr-md border bg-muted px-4 py-2.5 max-w-[85%] whitespace-pre-wrap">
         <MessagePrimitive.Parts components={{ Image: ImagePart }} />
       </div>
     </MessagePrimitive.Root>
@@ -379,12 +393,12 @@ function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Assistant
         </span>
         <ModelChip />
       </div>
-      <div className="rounded-2xl rounded-tl-md border border-border bg-bg-soft px-4 py-3 max-w-[95%]">
+      <div className="rounded-2xl rounded-tl-md border bg-card text-card-foreground px-4 py-3 max-w-[95%]">
         {/* While the response is still in flight and no content has
             arrived (no text-delta, no tool-call), the bubble was
             collapsing to a thin empty rectangle that looked broken.
@@ -404,7 +418,7 @@ function AssistantMessage() {
           }}
         />
       </div>
-      <div className="mt-1 flex items-center gap-1 text-fg-muted">
+      <div className="mt-1 flex items-center gap-1 text-muted-foreground">
         <AssistantActionBar />
         <BranchPicker />
       </div>
@@ -428,16 +442,15 @@ function ModelChip() {
   );
   if (!modelId) return null;
   return (
-    <span
-      className="
-        inline-flex items-center gap-1 rounded border border-border
-        bg-bg-soft px-1.5 py-px text-[10px] font-normal text-fg-muted
-      "
-      title={`Generated by ${modelId}`}
-    >
-      <span aria-hidden>🤖</span>
-      <span className="font-mono">{modelId}</span>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className="gap-1 font-normal text-muted-foreground">
+          <span aria-hidden>🤖</span>
+          <span className="font-mono">{modelId}</span>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>Generated by {modelId}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -445,15 +458,15 @@ function ThinkingDots() {
   return (
     <div className="flex items-center gap-1 py-0.5" aria-label="thinking">
       <span
-        className="h-1.5 w-1.5 animate-pulse rounded-full bg-fg-muted"
+        className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground"
         style={{ animationDelay: "0ms" }}
       />
       <span
-        className="h-1.5 w-1.5 animate-pulse rounded-full bg-fg-muted"
+        className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground"
         style={{ animationDelay: "150ms" }}
       />
       <span
-        className="h-1.5 w-1.5 animate-pulse rounded-full bg-fg-muted"
+        className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground"
         style={{ animationDelay: "300ms" }}
       />
     </div>
@@ -463,14 +476,20 @@ function ThinkingDots() {
 function ReasoningPart({ text }: { text: string }) {
   if (!text) return null;
   return (
-    <details className="my-2 rounded-lg border border-border bg-bg-base p-2 text-fg-muted">
-      <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider">
-        Reasoning
-      </summary>
-      <div className="mt-2 whitespace-pre-wrap font-mono text-[0.85em] leading-relaxed">
+    <Collapsible className="my-2 rounded-lg border bg-background p-2 text-muted-foreground">
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto w-full justify-start px-1 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-transparent"
+        >
+          Reasoning
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 whitespace-pre-wrap font-mono text-[0.85em] leading-relaxed">
         {text}
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -487,23 +506,15 @@ function AssistantActionBar() {
       className="flex items-center gap-0.5"
     >
       <ActionBarPrimitive.Copy asChild>
-        <button
-          type="button"
-          aria-label="Copy"
-          className="rounded px-2 py-0.5 text-xs hover:bg-bg-mid hover:text-fg-base"
-        >
+        <Button variant="ghost" size="xs" aria-label="Copy">
           <MessagePrimitive.If copied>Copied</MessagePrimitive.If>
           <MessagePrimitive.If copied={false}>Copy</MessagePrimitive.If>
-        </button>
+        </Button>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload asChild>
-        <button
-          type="button"
-          aria-label="Regenerate"
-          className="rounded px-2 py-0.5 text-xs hover:bg-bg-mid hover:text-fg-base"
-        >
+        <Button variant="ghost" size="xs" aria-label="Regenerate">
           Regenerate
-        </button>
+        </Button>
       </ActionBarPrimitive.Reload>
     </ActionBarPrimitive.Root>
   );
@@ -516,25 +527,17 @@ function BranchPicker() {
       className="flex items-center gap-1 text-xs"
     >
       <BranchPickerPrimitive.Previous asChild>
-        <button
-          type="button"
-          aria-label="Previous branch"
-          className="rounded px-1.5 py-0.5 hover:bg-bg-mid hover:text-fg-base"
-        >
+        <Button variant="ghost" size="icon-xs" aria-label="Previous branch">
           ←
-        </button>
+        </Button>
       </BranchPickerPrimitive.Previous>
       <span className="tabular-nums">
         <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
       </span>
       <BranchPickerPrimitive.Next asChild>
-        <button
-          type="button"
-          aria-label="Next branch"
-          className="rounded px-1.5 py-0.5 hover:bg-bg-mid hover:text-fg-base"
-        >
+        <Button variant="ghost" size="icon-xs" aria-label="Next branch">
           →
-        </button>
+        </Button>
       </BranchPickerPrimitive.Next>
     </BranchPickerPrimitive.Root>
   );
@@ -552,28 +555,26 @@ function Composer({
   // this same id as body.id, so toolbar GET/PUT and /chat hit the
   // same SQLite row.
   return (
-    <div className="border-t border-border bg-bg-base">
-      <div className="mx-auto flex w-full max-w-thread flex-col gap-2 px-4 pb-3 pt-3">
-        <div className="flex items-center gap-2">
-          <ModelPicker conversationId={conversationId} authedFetch={authedFetch} />
-          <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
-          <ReasoningToggle conversationId={conversationId} authedFetch={authedFetch} />
-        </div>
-        <ComposerPrimitive.Root className="flex items-end gap-2">
-          <ComposerPrimitive.Input
-            placeholder="Send a message…"
-            autoFocus
-            rows={1}
-            className="
-              flex-1 resize-none rounded-lg border border-border bg-bg-soft px-3 py-2
-              text-fg-base placeholder:text-fg-muted
-              focus:border-accent focus:outline-none
-              min-h-[40px] max-h-[200px]
-            "
-          />
-          <ComposerPrimitive.Send className="rounded-lg bg-accent px-4 py-2 font-semibold text-bg-base hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
-            Send
-          </ComposerPrimitive.Send>
+    <div className="border-t bg-background">
+      <div className="mx-auto w-full max-w-[44rem] px-4 pb-3 pt-3">
+        <ComposerPrimitive.Root className="flex flex-col gap-2 rounded-lg border border-input bg-transparent px-3 py-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+          <ComposerPrimitive.Input asChild>
+            <textarea
+              placeholder="Send a message…"
+              autoFocus
+              rows={1}
+              className="field-sizing-content min-h-6 max-h-50 w-full resize-none bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
+            />
+          </ComposerPrimitive.Input>
+          <div className="flex items-center gap-2">
+            <ComposerOptionsMenu conversationId={conversationId} authedFetch={authedFetch} />
+            <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
+            <ComposerPrimitive.Send asChild>
+              <Button size="sm" className="ml-auto">
+                Send
+              </Button>
+            </ComposerPrimitive.Send>
+          </div>
         </ComposerPrimitive.Root>
       </div>
     </div>

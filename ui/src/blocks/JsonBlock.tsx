@@ -31,7 +31,7 @@ export function JsonBlock({ raw }: { raw: string }) {
 function JsonNode({ value, depth }: { value: unknown; depth: number }) {
   const [open, setOpen] = useState(depth < 2);
 
-  if (value === null) return <span className="text-fg-muted">null</span>;
+  if (value === null) return <span className="text-muted-foreground">null</span>;
   if (typeof value === "boolean") return <span className="text-[#ffa657]">{String(value)}</span>;
   if (typeof value === "number") return <span className="text-[#ffa657]">{value}</span>;
   if (typeof value === "string") return <span className="text-[#a5d6ff]">"{value}"</span>;
@@ -43,7 +43,7 @@ function JsonNode({ value, depth }: { value: unknown; depth: number }) {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="cursor-pointer text-fg-muted hover:text-fg-base"
+          className="cursor-pointer text-muted-foreground hover:text-foreground"
         >
           {open ? "[" : `[…${value.length}]`}
         </button>
@@ -52,7 +52,7 @@ function JsonNode({ value, depth }: { value: unknown; depth: number }) {
             <div className="pl-4">
               {value.map((item, i) => (
                 <div key={i}>
-                  <span className="text-fg-muted">{i}: </span>
+                  <span className="text-muted-foreground">{i}: </span>
                   <JsonNode value={item} depth={depth + 1} />
                   {i < value.length - 1 ? "," : null}
                 </div>
@@ -73,7 +73,7 @@ function JsonNode({ value, depth }: { value: unknown; depth: number }) {
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="cursor-pointer text-fg-muted hover:text-fg-base"
+          className="cursor-pointer text-muted-foreground hover:text-foreground"
         >
           {open ? "{" : `{…${entries.length}}`}
         </button>
@@ -83,7 +83,7 @@ function JsonNode({ value, depth }: { value: unknown; depth: number }) {
               {entries.map(([k, v], i) => (
                 <div key={k}>
                   <span className="text-[#d2a8ff]">"{k}"</span>
-                  <span className="text-fg-muted">: </span>
+                  <span className="text-muted-foreground">: </span>
                   <JsonNode value={v} depth={depth + 1} />
                   {i < entries.length - 1 ? "," : null}
                 </div>
