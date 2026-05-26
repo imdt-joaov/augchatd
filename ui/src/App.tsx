@@ -27,6 +27,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Sidebar,
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { createAuthedFetch, type AuthedFetch } from "@/lib/authedFetch";
 import { ConversationList } from "./ConversationList.tsx";
 
@@ -214,8 +220,8 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <div className="flex h-full">
-        <aside className="w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      <SidebarProvider defaultOpen className="h-full min-h-0">
+        <Sidebar collapsible="icon">
           <ConversationList
             authedFetch={authedFetch}
             currentCid={boot.cid}
@@ -224,8 +230,11 @@ export default function App() {
             onNew={newConversation}
             onDelete={deleteConversation}
           />
-        </aside>
-        <div className="flex min-w-0 flex-1 flex-col">
+        </Sidebar>
+        <SidebarInset className="flex min-h-0 flex-col">
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b px-2">
+            <SidebarTrigger className="-ml-1" />
+          </header>
           {health.mode === "demo" && <DemoBanner />}
           <ChatRoom
             key={boot.cid}
@@ -235,8 +244,8 @@ export default function App() {
             initialMessages={boot.initialMessages}
             onFirstMessage={bumpRefetch}
           />
-        </div>
-      </div>
+        </SidebarInset>
+      </SidebarProvider>
     </TooltipProvider>
   );
 }
