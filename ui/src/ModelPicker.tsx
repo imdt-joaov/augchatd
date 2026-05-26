@@ -94,6 +94,13 @@ export function ModelPicker({
       }
       setSelected(model_id);
       setOpen(false);
+      // Tell sibling controls (e.g. ReasoningToggle) the active model
+      // changed so they can show/hide based on the new model's
+      // capabilities. Same-tab only; CustomEvent on window is sufficient
+      // — there is no cross-tab story for a single demo conversation.
+      window.dispatchEvent(
+        new CustomEvent("augchatd:current-model-changed", { detail: { model_id } }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

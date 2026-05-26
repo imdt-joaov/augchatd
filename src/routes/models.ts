@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { SessionRecord } from "../session-registry.ts";
 import { listProviderModels, type ProviderModel } from "../provider-models.ts";
+import { supportsReasoning } from "../reasoning.ts";
 
 /**
  * GET /session/models
@@ -27,7 +28,10 @@ export async function listSessionModelsHandler(c: Context): Promise<Response> {
   const cached = cache.get(key);
   const fresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
   const payload = (models: ProviderModel[], wasCached: boolean) => ({
-    models,
+    models: models.map((m) => ({
+      ...m,
+      supports_reasoning: supportsReasoning(m.provider, m.id),
+    })),
     cached: wasCached,
     current_model_id: session.model.model_id,
     provider: session.model.provider,

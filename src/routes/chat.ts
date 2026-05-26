@@ -10,6 +10,7 @@ import {
 import { llmFor } from "../llm.ts";
 import { isUpstreamUnauthorizedSentinel, toolsForActiveConnectors } from "../mcp.ts";
 import { consumeRagHits, toolsForActiveRagConnectors } from "../rag.ts";
+import { supportsReasoning } from "../reasoning.ts";
 import type { SessionRecord } from "../session-registry.ts";
 import { writeTraceEvent } from "../trace.ts";
 import { markChatEnd, markChatStart } from "../chat-inflight.ts";
@@ -17,6 +18,7 @@ import {
   createConversation,
   getConversation,
   resolveModelId,
+  resolveReasoningEnabled,
   snapshotActiveMap,
   upsertMessages,
 } from "../conversation-registry.ts";
@@ -81,6 +83,7 @@ export async function chatHandler(c: Context): Promise<Response> {
   // toggles do not affect this turn.
   const activeMap = snapshotActiveMap(conversation, session);
   const modelId = resolveModelId(conversation, session);
+  const reasoningEnabled = resolveReasoningEnabled(conversation, session);
 
   const mcpConnectors = session.connectors.filter((c) => c.type === "mcp");
   const ragConnectors = session.connectors.filter((c) => c.type === "rag");
@@ -157,6 +160,7 @@ export async function chatHandler(c: Context): Promise<Response> {
         providerOptions: reasoningProviderOptions(
           session.model.provider,
           modelId,
+          reasoningEnabled,
         ) as Parameters<typeof streamText>[0]["providerOptions"],
         // Propagate client disconnect to the upstream provider and to any
         // tool calls in flight. Without this the LLM + every MCP / RAG
@@ -320,18 +324,27 @@ export async function chatHandler(c: Context): Promise<Response> {
  * "summary" turns it into streamable text the bundled UI renders inside a
  * collapsible "Reasoning" section (see App.tsx's `ReasoningPart`).
  *
- * Gated on model id because passing the provider option to a model that
- * isn't a reasoning model returns 400 from the upstream API. The id regex
- * matches the catalog filter in provider-models.ts.
+ * Gated on model id (via supportsReasoning) because passing the provider
+ * option to a model that isn't a reasoning model returns 400 from the
+ * upstream API.
+ *
+ * Per-conversation `enabled` flag (contract-reasoning-toggle): when false,
+ * we return `undefined` even for reasoning-capable models, so no
+ * `reasoning-*` parts hit the UI stream. Note that for OpenAI o-series /
+ * gpt-5 the model still spends `reasoning_tokens` server-side — the
+ * toggle only suppresses the surfaced summary, not the reasoning itself.
  */
 function reasoningProviderOptions(
   provider: string,
   modelId: string,
+  enabled: boolean,
 ): Record<string, Record<string, unknown>> | undefined {
-  if (provider === "openai" && /^(o[1-9]|gpt-5)/.test(modelId)) {
+  if (!enabled) return undefined;
+  if (!supportsReasoning(provider, modelId)) return undefined;
+  if (provider === "openai") {
     return { openai: { reasoningSummary: "auto" } };
   }
-  if (provider === "anthropic" && /opus|sonnet/.test(modelId)) {
+  if (provider === "anthropic") {
     return {
       anthropic: { thinking: { type: "enabled", budgetTokens: 2048 } },
     };

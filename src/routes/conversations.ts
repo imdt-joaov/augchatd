@@ -7,8 +7,10 @@ import {
   listConnectorsForConversation,
   listConversations,
   listMessages,
+  resolveReasoningEnabled,
   setConnectorActive,
   setConversationModel,
+  setConversationReasoning,
 } from "../conversation-registry.ts";
 import { HotWriteError } from "../storage.ts";
 import { isChatInFlight } from "../chat-inflight.ts";
@@ -187,6 +189,59 @@ export async function setConversationModelHandler(c: Context): Promise<Response>
 
   const setOrRes = tryHotWrite(c, () =>
     setConversationModel(record, session, model_id),
+  );
+  if (setOrRes instanceof Response) return setOrRes;
+  return new Response(null, { status: 204 });
+}
+
+/** GET /conversations/:conversation_id/reasoning */
+export async function getConversationReasoningHandler(c: Context): Promise<Response> {
+  const session = c.get("session") as SessionRecord;
+  const cid = c.req.param("conversation_id");
+  if (!cid) return c.json({ error: "missing_conversation_id" }, 400);
+
+  const recordOrRes = tryHotWrite(
+    c,
+    () => getConversation(cid, session) ?? createConversation(session, cid),
+  );
+  if (recordOrRes instanceof Response) return recordOrRes;
+
+  const enabled = resolveReasoningEnabled(recordOrRes, session);
+  return c.json({ enabled });
+}
+
+/** PUT /conversations/:conversation_id/reasoning */
+export async function setConversationReasoningHandler(c: Context): Promise<Response> {
+  const session = c.get("session") as SessionRecord;
+  const cid = c.req.param("conversation_id");
+  if (!cid) return c.json({ error: "missing_conversation_id" }, 400);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid_json" }, 400);
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return c.json({ error: "body_must_be_object" }, 400);
+  }
+  const fields = Object.keys(body as object);
+  if (fields.length !== 1 || fields[0] !== "enabled") {
+    return c.json({ error: "only_enabled_field_allowed" }, 400);
+  }
+  const enabled = (body as { enabled: unknown }).enabled;
+  if (typeof enabled !== "boolean") {
+    return c.json({ error: "enabled_must_be_boolean" }, 400);
+  }
+
+  const recordOrRes = tryHotWrite(
+    c,
+    () => getConversation(cid, session) ?? createConversation(session, cid),
+  );
+  if (recordOrRes instanceof Response) return recordOrRes;
+
+  const setOrRes = tryHotWrite(c, () =>
+    setConversationReasoning(recordOrRes, session, enabled),
   );
   if (setOrRes instanceof Response) return setOrRes;
   return new Response(null, { status: 204 });

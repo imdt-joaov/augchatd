@@ -6,11 +6,13 @@ import { chatHandler } from "./routes/chat.ts";
 import {
   createConversationHandler,
   deleteConversationHandler,
+  getConversationReasoningHandler,
   listConversationConnectorsHandler,
   listConversationMessagesHandler,
   listConversationsHandler,
   setConversationConnectorStateHandler,
   setConversationModelHandler,
+  setConversationReasoningHandler,
 } from "./routes/conversations.ts";
 import { listSessionModelsHandler } from "./routes/models.ts";
 import { requireSession } from "./auth.ts";
@@ -77,6 +79,16 @@ export function createApp(config: BootConfig): Hono {
       "/conversations/:conversation_id/model",
       requireSession,
       setConversationModelHandler,
+    );
+    app.get(
+      "/conversations/:conversation_id/reasoning",
+      requireSession,
+      getConversationReasoningHandler,
+    );
+    app.put(
+      "/conversations/:conversation_id/reasoning",
+      requireSession,
+      setConversationReasoningHandler,
     );
     app.get("/session/models", requireSession, listSessionModelsHandler);
     app.get(

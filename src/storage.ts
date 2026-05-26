@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS conversation (
   conversation_id    TEXT PRIMARY KEY,
   session_id         TEXT NOT NULL,
   model_id_override  TEXT,
+  reasoning_disabled INTEGER,
   created_at         TEXT NOT NULL
 );
 
@@ -131,6 +132,10 @@ const MIGRATIONS = [
   // Per-message metadata (e.g. which model produced an assistant message).
   // Added after the initial schema; existing rows get NULL.
   "ALTER TABLE message ADD COLUMN metadata_json TEXT",
+  // Per-conversation reasoning toggle (contract-reasoning-toggle). We
+  // store the "disabled" flag so NULL/0 = enabled (preserves the
+  // pre-migration default) and no backfill is needed.
+  "ALTER TABLE conversation ADD COLUMN reasoning_disabled INTEGER",
 ];
 
 /** Get (or open) the hot DB for a session. */

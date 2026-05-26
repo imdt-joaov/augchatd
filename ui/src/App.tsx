@@ -18,6 +18,7 @@ import { ToolCallBlock, ToolGroup } from "./blocks/ToolCallBlock.tsx";
 import { SourceBlock } from "./blocks/SourceBlock.tsx";
 import { ConnectorsMenu } from "./ConnectorsMenu.tsx";
 import { ModelPicker } from "./ModelPicker.tsx";
+import { ReasoningToggle } from "./ReasoningToggle.tsx";
 
 type AuthedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -201,7 +202,7 @@ function setIframeRoute(path: string): void {
   window.history.replaceState(null, "", path);
   window.parent.postMessage(
     { type: "augchatd:route", path },
-    window.location.origin,
+    document.referrer,
   );
 }
 
@@ -213,9 +214,9 @@ function requestJwtFromParent(
   timeoutMs = 10000,
 ): Promise<{ jwt: string; theme?: "light" | "dark" }> {
   return new Promise((resolve, reject) => {
-    const origin = window.location.origin;
+    const referrer = document.referrer
     const handler = (e: MessageEvent) => {
-      if (e.origin !== origin) return;
+      if (e.origin !== referrer) return;
       const d = e.data as { type?: string; jwt?: unknown; theme?: unknown } | undefined;
       if (d?.type !== "augchatd:jwt" || typeof d.jwt !== "string") return;
       window.removeEventListener("message", handler);
@@ -233,7 +234,7 @@ function requestJwtFromParent(
       );
     }, timeoutMs);
     window.addEventListener("message", handler);
-    window.parent.postMessage({ type: "augchatd:ready" }, origin);
+    window.parent.postMessage({ type: "augchatd:ready" }, referrer);
   });
 }
 
@@ -556,6 +557,7 @@ function Composer({
         <div className="flex items-center gap-2">
           <ModelPicker conversationId={conversationId} authedFetch={authedFetch} />
           <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
+          <ReasoningToggle conversationId={conversationId} authedFetch={authedFetch} />
         </div>
         <ComposerPrimitive.Root className="flex items-end gap-2">
           <ComposerPrimitive.Input

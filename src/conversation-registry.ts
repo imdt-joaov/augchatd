@@ -18,6 +18,8 @@ import { HotWriteError, storageFor } from "./storage.ts";
  *   - snapshotActiveMap        — chat handler reads this at turn start
  *   - setConversationModel     — `PUT /conversations/:cid/model`
  *   - resolveModelId           — chat handler reads this at turn start
+ *   - setConversationReasoning — `PUT /conversations/:cid/reasoning`
+ *   - resolveReasoningEnabled  — chat handler reads this at turn start
  *   - upsertMessage / listMessages — message history
  *
  * The "record" handed back is intentionally lightweight (just an id).
@@ -223,6 +225,43 @@ export function resolveModelId(
     | { model_id_override: string | null }
     | undefined;
   return row?.model_id_override ?? session.model.model_id;
+}
+
+/**
+ * Per-conversation reasoning toggle (contract-reasoning-toggle).
+ *
+ * We store the "disabled" flag (column `reasoning_disabled INTEGER`) so
+ * that NULL / 0 means "enabled" — preserving the default for rows
+ * created before the migration without a backfill.
+ */
+export function setConversationReasoning(
+  record: ConversationRecord,
+  session: SessionRecord,
+  enabled: boolean,
+): void {
+  const db = storageFor(session);
+  try {
+    db.prepare(
+      "UPDATE conversation SET reasoning_disabled = ? WHERE conversation_id = ?",
+    ).run(enabled ? 0 : 1, record.conversation_id);
+  } catch (err) {
+    throw new HotWriteError(err instanceof Error ? err.message : String(err));
+  }
+}
+
+export function resolveReasoningEnabled(
+  record: ConversationRecord,
+  session: SessionRecord,
+): boolean {
+  const db = storageFor(session);
+  const row = db
+    .prepare(
+      "SELECT reasoning_disabled FROM conversation WHERE conversation_id = ?",
+    )
+    .get(record.conversation_id) as
+    | { reasoning_disabled: number | null }
+    | undefined;
+  return (row?.reasoning_disabled ?? 0) === 0;
 }
 
 /**
