@@ -72,6 +72,7 @@ export default function App() {
   const [jwtReady, setJwtReady] = useState(false);
   const [boot, setBoot] = useState<BootState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refetchKey, setRefetchKey] = useState(0);
 
   // jwtRef is shared by every authed request (chat transport, list
   // sidebar, model picker, connector toggle). The handshake-driven
@@ -131,6 +132,10 @@ export default function App() {
     };
   }, []);
 
+  const bumpRefetch = useCallback(() => {
+    setRefetchKey((k) => k + 1);
+  }, []);
+
   const newConversation = useCallback(async () => {
     const r = await authedFetch("/conversations", {
       method: "POST",
@@ -141,7 +146,8 @@ export default function App() {
     const { conversation_id } = (await r.json()) as { conversation_id: string };
     setIframeRoute(`/c/${conversation_id}`);
     setBoot({ cid: conversation_id, initialMessages: [] });
-  }, [authedFetch]);
+    bumpRefetch();
+  }, [authedFetch, bumpRefetch]);
 
   const switchConversation = useCallback(
     async (cid: string) => {
@@ -183,9 +189,11 @@ export default function App() {
       }
       if (boot && boot.cid === cid) {
         await newConversation();
+      } else {
+        bumpRefetch();
       }
     },
-    [authedFetch, boot, newConversation],
+    [authedFetch, boot, newConversation, bumpRefetch],
   );
 
   if (error) {
@@ -203,11 +211,12 @@ export default function App() {
     );
   }
 
-  // switchConversation / deleteConversation are referenced by the
-  // sidebar wired in Step 4; void them here so Step 1 stays TS-clean
-  // while keeping the actions exported by the App scope.
+  // switchConversation / deleteConversation / refetchKey are consumed
+  // by the sidebar wired in a later step; void them here so TS stays
+  // clean while the actions remain available at App scope.
   void switchConversation;
   void deleteConversation;
+  void refetchKey;
 
   return (
     <TooltipProvider>
@@ -219,6 +228,7 @@ export default function App() {
           authedFetch={authedFetch}
           conversationId={boot.cid}
           initialMessages={boot.initialMessages}
+          onFirstMessage={bumpRefetch}
         />
       </div>
     </TooltipProvider>
@@ -353,11 +363,13 @@ function ChatRoom({
   authedFetch,
   conversationId,
   initialMessages,
+  onFirstMessage,
 }: {
   jwtRef: React.MutableRefObject<string>;
   authedFetch: AuthedFetch;
   conversationId: string;
   initialMessages: UIMessage[];
+  onFirstMessage: () => void;
 }) {
   const transport = useMemo(
     () =>
@@ -391,6 +403,25 @@ function ChatRoom({
   );
 
   const runtime = useChatRuntime({ transport, messages: initialMessages });
+
+  // The server-derived conversation title comes from the first user
+  // message (deriveTitle in conversation-registry.ts). Fire once per
+  // mount, on the 0→≥1 transition of thread.messages, so the parent's
+  // sidebar list refetches and shows the freshly-minted title without
+  // waiting on the next user action.
+  const firedFirstMessageRef = useRef(false);
+  useEffect(() => {
+    firedFirstMessageRef.current = initialMessages.length > 0;
+    const unsubscribe = runtime.thread.subscribe(() => {
+      if (firedFirstMessageRef.current) return;
+      const count = runtime.thread.getState().messages.length;
+      if (count >= 1) {
+        firedFirstMessageRef.current = true;
+        onFirstMessage();
+      }
+    });
+    return unsubscribe;
+  }, [runtime, initialMessages, onFirstMessage]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
