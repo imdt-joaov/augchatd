@@ -67,3 +67,18 @@ The UI subproject landed on branch `impl-demo-mode` with the following stack. Re
 - **Component primitives: `@assistant-ui/react` primitives composed manually** (`ThreadPrimitive`, `MessagePrimitive`, `ComposerPrimitive`, etc.). No Radix / React Aria wrappers — the bundled UI styles the primitives directly with Tailwind utilities.
 - **Routing: client-side via `window.history.replaceState`** (no `react-router` — the convention `/c/<conversation_id>` is the entire surface; see [contract-ui-handshake#augchatd:route](../../contracts/browser-postmessage.md)).
 - **Markdown rendering: `react-markdown` + `remark-gfm` + `remark-math` + `rehype-katex` + `rehype-highlight` + `rehype-raw` + `rehype-sanitize`** (with an extended schema allowing inline SVG). See [contract-ui-rendering](../../behavior/contracts/ui-rendering.md) for the full renderer catalog.
+
+> [!IMPORTANT] PENDING RECONCILIATION — shadcn layering on top of primitives
+> The bullet "**Component primitives: `@assistant-ui/react` primitives composed manually** … No Radix / React Aria wrappers — the bundled UI styles the primitives directly with Tailwind utilities" is partially outdated after the ThreadList refactor:
+>
+> - The sidebar shell is now `ThreadListSidebar` from the assistant-ui shadcn registry, copied into `ui/src/components/assistant-ui/threadlist-sidebar.tsx` and customized in place.
+> - It renders `<ThreadList />` (also from the registry, in `thread-list.tsx`) which wraps `ThreadListPrimitive` / `ThreadListItemPrimitive` / `ThreadListItemMorePrimitive` with shadcn `Button`, `Skeleton`, and `Sidebar*` shells.
+> - Those shadcn components are built on Radix Primitives (`@radix-ui/react-*`), so the "No Radix" clause is no longer literally true.
+> - Thread-state ownership moved from custom App-level callbacks (`ConversationList.tsx`, `App.tsx:newConversation/switchConversation/deleteConversation`) into assistant-ui via `useRemoteThreadListRuntime` + a `RemoteThreadListAdapter` (`ui/src/lib/threadListAdapter.tsx`) that targets the same `/conversations*` REST surface.
+>
+> Proposed direction: **update the spec** — promote the layering to an explicit choice. Two options:
+>
+> 1. Rewrite this bullet to read: "Component primitives: `@assistant-ui/react` primitives composed manually, **with the `Thread*` family for the chat surface and the assistant-ui shadcn registry components (`threadlist-sidebar`, `thread-list`) for the thread list — those wrap `Sidebar` / `Button` / `Skeleton` from shadcn, which use Radix under the hood**. The bundled UI customizes installed registry files in place rather than re-skinning at the consumer side."
+> 2. Or, spin a fresh ADR (e.g. `0012-shadcn-for-non-thread-ui.md`) since "we now consume two registries (assistant-ui + shadcn)" is a coordination decision (component upgrades, customization model) and not just a styling tweak.
+>
+> Decision deferred to a human review pass.

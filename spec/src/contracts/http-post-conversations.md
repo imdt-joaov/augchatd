@@ -9,7 +9,7 @@ evidence:
     section: "createConversation — single transaction: INSERT conversation + snapshotDefaultsTx"
   - id: code-ptr-ui-conversation-new
     source: spec/src/evidence/code-pointers/ui-conversation-new.md
-    section: "Bundled SPA newConversation action (sidebar '+ Nova' button)"
+    section: "Bundled SPA RemoteThreadListAdapter.initialize (eager on thread mount; also drives ThreadListPrimitive.New)"
 links:
   - relation: supports
     target: contract-connector-toggle

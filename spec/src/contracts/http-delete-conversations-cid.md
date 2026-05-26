@@ -9,7 +9,7 @@ evidence:
     section: "deleteConversation — cascade DELETE in a single transaction"
   - id: code-ptr-ui-conversation-delete
     source: spec/src/evidence/code-pointers/ui-conversation-delete.md
-    section: "Bundled SPA deleteConversation action (per-row ✕ in the sidebar)"
+    section: "Bundled SPA RemoteThreadListAdapter.delete (Delete item in ThreadListItemMore menu)"
 links:
   - relation: supports
     target: contract-storage-hot
