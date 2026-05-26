@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { createAuthedFetch, type AuthedFetch } from "@/lib/authedFetch";
+import { ConversationList } from "./ConversationList.tsx";
 
 interface BootState {
   cid: string;
@@ -211,25 +212,30 @@ export default function App() {
     );
   }
 
-  // switchConversation / deleteConversation / refetchKey are consumed
-  // by the sidebar wired in a later step; void them here so TS stays
-  // clean while the actions remain available at App scope.
-  void switchConversation;
-  void deleteConversation;
-  void refetchKey;
-
   return (
     <TooltipProvider>
-      <div className="flex h-full flex-col">
-        {health.mode === "demo" && <DemoBanner />}
-        <ChatRoom
-          key={boot.cid}
-          jwtRef={jwtRef}
-          authedFetch={authedFetch}
-          conversationId={boot.cid}
-          initialMessages={boot.initialMessages}
-          onFirstMessage={bumpRefetch}
-        />
+      <div className="flex h-full">
+        <aside className="w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+          <ConversationList
+            authedFetch={authedFetch}
+            currentCid={boot.cid}
+            refetchKey={refetchKey}
+            onSelect={switchConversation}
+            onNew={newConversation}
+            onDelete={deleteConversation}
+          />
+        </aside>
+        <div className="flex min-w-0 flex-1 flex-col">
+          {health.mode === "demo" && <DemoBanner />}
+          <ChatRoom
+            key={boot.cid}
+            jwtRef={jwtRef}
+            authedFetch={authedFetch}
+            conversationId={boot.cid}
+            initialMessages={boot.initialMessages}
+            onFirstMessage={bumpRefetch}
+          />
+        </div>
       </div>
     </TooltipProvider>
   );
