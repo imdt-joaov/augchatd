@@ -32,6 +32,7 @@ export function ConversationList({
     ConversationListItem[] | null
   >(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +52,7 @@ export function ConversationList({
     return () => {
       cancelled = true;
     };
-  }, [authedFetch, refetchKey]);
+  }, [authedFetch, refetchKey, attempt]);
 
   return (
     <div className="flex h-full flex-col">
@@ -65,17 +66,22 @@ export function ConversationList({
       </div>
       <Separator />
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        {conversations === null && !error && (
-          <div className="px-1 py-2 text-xs text-muted-foreground">
-            Carregando…
+        {conversations === null && !error && <LoadingSkeleton />}
+        {error && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-destructive">
+            <span>Erro ao listar.</span>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setAttempt((a) => a + 1)}
+            >
+              Reconectar
+            </Button>
           </div>
         )}
-        {error && (
-          <div className="px-1 py-2 text-xs text-destructive">{error}</div>
-        )}
         {conversations && conversations.length === 0 && !error && (
-          <div className="px-1 py-2 text-xs text-muted-foreground">
-            Nenhuma conversa
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+            Nenhuma conversa ainda.
           </div>
         )}
         {conversations &&
@@ -89,6 +95,16 @@ export function ConversationList({
             />
           ))}
       </div>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div>
+      <div className="h-10 animate-pulse rounded bg-muted/50" />
+      <div className="mt-1 h-10 animate-pulse rounded bg-muted/50" />
+      <div className="mt-1 h-10 animate-pulse rounded bg-muted/50" />
     </div>
   );
 }
@@ -109,6 +125,7 @@ function ConversationRow({
     <button
       type="button"
       onClick={() => onSelect(cid)}
+      aria-current={active ? "page" : undefined}
       className={
         "group/row mt-0.5 flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors " +
         (active
