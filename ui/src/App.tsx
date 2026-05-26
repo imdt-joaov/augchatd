@@ -27,8 +27,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-type AuthedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+import { createAuthedFetch, type AuthedFetch } from "@/lib/authedFetch";
 
 interface BootState {
   cid: string;
@@ -70,9 +69,27 @@ const SUGGESTIONS = [
  */
 export default function App() {
   const [health, setHealth] = useState<HealthState | null>(null);
-  const [jwt, setJwt] = useState<string | null>(null);
+  const [jwtReady, setJwtReady] = useState(false);
   const [boot, setBoot] = useState<BootState | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // jwtRef is shared by every authed request (chat transport, list
+  // sidebar, model picker, connector toggle). The handshake-driven
+  // refresh updates it in place; setting state would re-render the
+  // whole subtree and tear down the chat runtime.
+  const jwtRef = useRef<string>("");
+
+  const refreshJwt = useCallback(async () => {
+    const { jwt, theme } = await requestJwtFromParent();
+    jwtRef.current = jwt;
+    applyTheme(theme);
+    return { jwt, theme };
+  }, []);
+
+  const authedFetch = useMemo(
+    () => createAuthedFetch(jwtRef, refreshJwt),
+    [refreshJwt],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +115,8 @@ export default function App() {
         const { jwt, theme } = await requestJwtFromParent();
         if (cancelled) return;
         applyTheme(theme);
-        setJwt(jwt);
+        jwtRef.current = jwt;
+        setJwtReady(true);
 
         const b = await resolveBootConversation(jwt);
         if (cancelled) return;
@@ -113,6 +131,63 @@ export default function App() {
     };
   }, []);
 
+  const newConversation = useCallback(async () => {
+    const r = await authedFetch("/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (!r.ok) throw new Error(`POST /conversations HTTP ${r.status}`);
+    const { conversation_id } = (await r.json()) as { conversation_id: string };
+    setIframeRoute(`/c/${conversation_id}`);
+    setBoot({ cid: conversation_id, initialMessages: [] });
+  }, [authedFetch]);
+
+  const switchConversation = useCallback(
+    async (cid: string) => {
+      const r = await authedFetch(
+        `/conversations/${encodeURIComponent(cid)}/messages`,
+      );
+      if (!r.ok) {
+        throw new Error(`GET /conversations/${cid}/messages HTTP ${r.status}`);
+      }
+      const data = (await r.json()) as {
+        messages: Array<{
+          message_id: string;
+          role: string;
+          parts: unknown;
+          metadata?: unknown;
+        }>;
+      };
+      const initialMessages: UIMessage[] = (data.messages ?? []).map((m) => ({
+        id: m.message_id,
+        role: m.role as UIMessage["role"],
+        parts: m.parts as UIMessage["parts"],
+        ...(m.metadata !== undefined && m.metadata !== null
+          ? { metadata: m.metadata as UIMessage["metadata"] }
+          : {}),
+      }));
+      setIframeRoute(`/c/${cid}`);
+      setBoot({ cid, initialMessages });
+    },
+    [authedFetch],
+  );
+
+  const deleteConversation = useCallback(
+    async (cid: string) => {
+      const r = await authedFetch(`/conversations/${encodeURIComponent(cid)}`, {
+        method: "DELETE",
+      });
+      if (!r.ok && r.status !== 404) {
+        throw new Error(`DELETE /conversations/${cid} HTTP ${r.status}`);
+      }
+      if (boot && boot.cid === cid) {
+        await newConversation();
+      }
+    },
+    [authedFetch, boot, newConversation],
+  );
+
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-destructive">
@@ -120,7 +195,7 @@ export default function App() {
       </div>
     );
   }
-  if (!health || !jwt || !boot) {
+  if (!health || !jwtReady || !boot) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
         Loading…
@@ -128,22 +203,33 @@ export default function App() {
     );
   }
 
+  // switchConversation / deleteConversation are referenced by the
+  // sidebar wired in Step 4; void them here so Step 1 stays TS-clean
+  // while keeping the actions exported by the App scope.
+  void switchConversation;
+  void deleteConversation;
+
   return (
     <TooltipProvider>
       <div className="flex h-full flex-col">
-        {health.mode === "demo" && (
-          <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
-            Demo session — not authenticated
-          </div>
-        )}
+        {health.mode === "demo" && <DemoBanner />}
         <ChatRoom
           key={boot.cid}
-          initialJwt={jwt}
+          jwtRef={jwtRef}
+          authedFetch={authedFetch}
           conversationId={boot.cid}
           initialMessages={boot.initialMessages}
         />
       </div>
     </TooltipProvider>
+  );
+}
+
+function DemoBanner() {
+  return (
+    <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
+      Demo session — not authenticated
+    </div>
   );
 }
 
@@ -263,39 +349,16 @@ function applyTheme(theme: "light" | "dark" | undefined): void {
 }
 
 function ChatRoom({
-  initialJwt,
+  jwtRef,
+  authedFetch,
   conversationId,
   initialMessages,
 }: {
-  initialJwt: string;
+  jwtRef: React.MutableRefObject<string>;
+  authedFetch: AuthedFetch;
   conversationId: string;
   initialMessages: UIMessage[];
 }) {
-  const jwtRef = useRef(initialJwt);
-
-  // Shared "authed fetch" for admin endpoints (model picker, connector toggle).
-  // Mirrors the JWT refresh logic in the chat transport below.
-  const authedFetch = useCallback(
-    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const withAuth = (token: string): RequestInit => {
-        const h = new Headers(init?.headers);
-        h.set("Authorization", `Bearer ${token}`);
-        return { ...init, headers: h };
-      };
-      const first = await fetch(input, withAuth(jwtRef.current));
-      if (first.status !== 401) return first;
-      try {
-        const { jwt, theme } = await requestJwtFromParent();
-        jwtRef.current = jwt;
-        applyTheme(theme);
-      } catch {
-        return first;
-      }
-      return fetch(input, withAuth(jwtRef.current));
-    },
-    [],
-  );
-
   const transport = useMemo(
     () =>
       new AssistantChatTransport({
