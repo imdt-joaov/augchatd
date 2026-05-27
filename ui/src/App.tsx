@@ -140,6 +140,29 @@ export default function App() {
     };
   }, []);
 
+  // Refresh the JWT when the chat backend emits a `data-augchatd-error`
+  // (upstream connector 401). The listener inside each assistant
+  // message dispatches the window event; here we run the same
+  // postMessage handshake the transport uses for JWT-401. In demo this
+  // mints a fresh session against the same boot-loaded config (so the
+  // expired connector creds come back the same); in production the
+  // integrator's parent page re-mints with refreshed creds.
+  useEffect(() => {
+    const handler = () => {
+      requestJwtFromParent()
+        .then(({ jwt, theme }) => {
+          jwtRef.current = jwt;
+          applyTheme(theme);
+        })
+        .catch(() => {
+          /* parent did not reply; user will see the inline warning */
+        });
+    };
+    window.addEventListener("augchatd:upstream-unauthorized", handler);
+    return () =>
+      window.removeEventListener("augchatd:upstream-unauthorized", handler);
+  }, []);
+
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-destructive">
@@ -192,8 +215,10 @@ function AugchatdRuntime({
     return match?.[1];
   }, []);
 
+  const [flushStalled, setFlushStalled] = useState(false);
+
   const runtime = useRemoteThreadListRuntime({
-    runtimeHook: () => useAugchatdChatRuntime({ authedFetch, jwtRef, refreshJwt }),
+    runtimeHook: () => useAugchatdChatRuntime({ authedFetch, jwtRef, refreshJwt, setFlushStalled, flushStalled }),
     adapter,
     ...(initialThreadId !== undefined ? { initialThreadId } : {}),
   });
@@ -208,7 +233,7 @@ function AugchatdRuntime({
             <SidebarTrigger className="-ml-1" />
           </header>
           {health.mode === "demo" && <DemoBanner />}
-          <ChatView authedFetch={authedFetch} />
+          <ChatView authedFetch={authedFetch} flushStalled={flushStalled} />
         </SidebarInset>
       </SidebarProvider>
     </AssistantRuntimeProvider>
@@ -230,10 +255,14 @@ function useAugchatdChatRuntime({
   authedFetch,
   jwtRef,
   refreshJwt,
+  setFlushStalled,
+  flushStalled,
 }: {
   authedFetch: AuthedFetch;
   jwtRef: React.MutableRefObject<string>;
   refreshJwt: RefreshJwt;
+  setFlushStalled: React.Dispatch<React.SetStateAction<boolean>>;
+  flushStalled: boolean;
 }) {
   // const aui = useAui();
   const remoteId = useAuiState((s) => s.threadListItem.remoteId);
@@ -261,6 +290,22 @@ function useAugchatdChatRuntime({
         headers: () => ({ Authorization: `Bearer ${jwtRef.current}` }),
         fetch: async (input, init) => {
           const r = await fetch(input, init);
+          // 503 + X-Augchatd-Reason: flush-stalled — the session has
+          // gone read-only because cold-storage flush stalled past
+          // threshold. Surface a banner; the flag clears when a flush
+          // eventually succeeds (next successful chat is preceded by a
+          // 200 here, which the success-path clears).
+          if (
+            r.status === 503 &&
+            r.headers.get("X-Augchatd-Reason") === "flush-stalled"
+          ) {
+            setFlushStalled(true);
+            return r;
+          }
+          if (r.status !== 401) {
+            if (flushStalled && r.ok) setFlushStalled(false);
+            return r;
+          }
           if (r.status !== 401) return r;
           try {
             const { jwt } = await refreshJwt();
@@ -270,7 +315,9 @@ function useAugchatdChatRuntime({
           }
           const retriedHeaders = new Headers(init?.headers);
           retriedHeaders.set("Authorization", `Bearer ${jwtRef.current}`);
-          return fetch(input, { ...init, headers: retriedHeaders });
+          const retry = await fetch(input, { ...init, headers: retriedHeaders });
+          if (flushStalled && retry.ok) setFlushStalled(false);
+          return retry;
         },
         // Override `body.id` to use OUR conversation_id (the active
         // thread's remoteId from the outer RemoteThreadList adapter)
@@ -365,134 +412,25 @@ function applyTheme(theme: "light" | "dark" | undefined): void {
   }
 }
 
-function ChatRoom({
-  initialJwt,
-  conversationId,
-  initialMessages,
-}: {
-  initialJwt: string;
-  conversationId: string;
-  initialMessages: UIMessage[];
-}) {
-  const jwtRef = useRef(initialJwt);
-  const [flushStalled, setFlushStalled] = useState(false);
-
-  // Shared "authed fetch" for admin endpoints (model picker, connector toggle).
-  // Mirrors the JWT refresh logic in the chat transport below.
-  const authedFetch = useCallback(
-    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-      const withAuth = (token: string): RequestInit => {
-        const h = new Headers(init?.headers);
-        h.set("Authorization", `Bearer ${token}`);
-        return { ...init, headers: h };
-      };
-      const first = await fetch(input, withAuth(jwtRef.current));
-      if (first.status !== 401) return first;
-      try {
-        const { jwt, theme } = await requestJwtFromParent();
-        jwtRef.current = jwt;
-        applyTheme(theme);
-      } catch {
-        return first;
-      }
-      return fetch(input, withAuth(jwtRef.current));
-    },
-    [],
-  );
-
-  const transport = useMemo(
-    () =>
-      new AssistantChatTransport({
-        api: "/chat",
-        headers: () => ({ Authorization: `Bearer ${jwtRef.current}` }),
-        fetch: async (input, init) => {
-          const r = await fetch(input, init);
-          // 503 + X-Augchatd-Reason: flush-stalled — the session has
-          // gone read-only because cold-storage flush stalled past
-          // threshold. Surface a banner; the flag clears when a flush
-          // eventually succeeds (next successful chat is preceded by a
-          // 200 here, which the success-path clears).
-          if (
-            r.status === 503 &&
-            r.headers.get("X-Augchatd-Reason") === "flush-stalled"
-          ) {
-            setFlushStalled(true);
-            return r;
-          }
-          if (r.status !== 401) {
-            if (flushStalled && r.ok) setFlushStalled(false);
-            return r;
-          }
-          try {
-            const { jwt, theme } = await requestJwtFromParent();
-            jwtRef.current = jwt;
-            applyTheme(theme);
-          } catch {
-            return r;
-          }
-          const retriedHeaders = new Headers(init?.headers);
-          retriedHeaders.set("Authorization", `Bearer ${jwtRef.current}`);
-          const retry = await fetch(input, { ...init, headers: retriedHeaders });
-          if (flushStalled && retry.ok) setFlushStalled(false);
-          return retry;
-        },
-        // Override `body.id` to use OUR conversation_id (the one in
-        // the URL / hydrated from POST /conversations) instead of the
-        // assistant-ui-internal threadListItem.id. assistant-ui's id
-        // stays client-local; the server sees only our cid, which is
-        // what the SQLite row keys on.
-        prepareSendMessagesRequest: ({ messages, trigger, messageId }) => ({
-          body: { id: conversationId, messages, trigger, messageId },
-        }),
-      }),
-    [conversationId],
-  );
-
-  const runtime = useChatRuntime({ transport, messages: initialMessages });
-
-  // Refresh the JWT when the chat backend emits a `data-augchatd-error`
-  // (upstream connector 401). The listener inside each assistant
-  // message dispatches the window event; here we run the same
-  // postMessage handshake the transport uses for JWT-401. In demo this
-  // mints a fresh session against the same boot-loaded config (so the
-  // expired connector creds come back the same); in production the
-  // integrator's parent page re-mints with refreshed creds.
-  useEffect(() => {
-    const handler = () => {
-      requestJwtFromParent()
-        .then(({ jwt, theme }) => {
-          jwtRef.current = jwt;
-          applyTheme(theme);
-        })
-        .catch(() => {
-          /* parent did not reply; user will see the inline warning */
-        });
-    };
-    window.addEventListener("augchatd:upstream-unauthorized", handler);
-    return () =>
-      window.removeEventListener("augchatd:upstream-unauthorized", handler);
-  }, []);
-
+function ChatView({ authedFetch, flushStalled }: { authedFetch: AuthedFetch; flushStalled: boolean }) {
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-        <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-thread flex-col gap-6 px-4 py-8">
-            <ThreadPrimitive.Empty>
-              <EmptyState />
-            </ThreadPrimitive.Empty>
-            <ThreadPrimitive.Messages
-              components={{ UserMessage, AssistantMessage }}
-            />
-          </div>
-        </ThreadPrimitive.Viewport>
-        {flushStalled ? (
+    <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
+      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 py-8">
+          <ThreadPrimitive.Empty>
+            <EmptyState />
+          </ThreadPrimitive.Empty>
+          <ThreadPrimitive.Messages
+            components={{ UserMessage, AssistantMessage }}
+          />
+        </div>
+      </ThreadPrimitive.Viewport>
+      {flushStalled ? (
           <FlushStalledBanner />
         ) : (
-          <Composer conversationId={conversationId} authedFetch={authedFetch} />
+          <Composer authedFetch={authedFetch} />
         )}
-      </ThreadPrimitive.Root>
-    </AssistantRuntimeProvider>
+    </ThreadPrimitive.Root>
   );
 }
 
