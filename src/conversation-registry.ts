@@ -1,6 +1,11 @@
 import type { Connector } from "./connectors.ts";
 import type { SessionRecord } from "./session-registry.ts";
 import { HotWriteError, storageFor } from "./storage.ts";
+import {
+  coldStorageConfigFrom,
+  downloadFlush,
+  type ColdStorageConfig,
+} from "./cold-storage.ts";
 
 /**
  * Per-conversation connector active state, model override, and message
@@ -418,6 +423,83 @@ function deriveTitle(partsJson: string): string | null {
  * row was deleted (the cid did not exist for this user); the route handler
  * maps that to a 404.
  */
+/**
+ * If a `(tenant, user)` does not have this cid in hot SQLite, try cold
+ * storage. On hit: insert the conversation row, every message, and
+ * every per-connector saved active flag into hot — so subsequent sync
+ * `getConversation` / `listMessages` / `listConnectorsForConversation`
+ * calls see it.
+ *
+ * Async because the cold fetch is HTTP. Callers should await this on
+ * the slow paths (chat handler at turn start; GET messages route)
+ * BEFORE the sync `getConversation` lookup.
+ *
+ * No-op when (a) the cid is already hot, or (b) the session has no
+ * cold storage configured (hot-only mode).
+ */
+export async function hydrateFromColdIfMissing(
+  cid: string,
+  session: SessionRecord,
+): Promise<void> {
+  const db = storageFor(session);
+  const have = db
+    .prepare("SELECT 1 FROM conversation WHERE conversation_id = ?")
+    .get(cid);
+  if (have) return;
+  let cold: ColdStorageConfig | undefined;
+  try {
+    cold = coldStorageConfigFrom(session.storage);
+  } catch {
+    cold = undefined;
+  }
+  if (!cold) return;
+  let body;
+  try {
+    body = await downloadFlush(cold, session.tenant_id, session.user_id, cid);
+  } catch (err) {
+    console.error(
+      `hydrate: downloadFlush ${cid}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+  if (!body) return;
+
+  const now = nowIso();
+  try {
+    db.transaction(() => {
+      db.prepare(
+        "INSERT INTO conversation (conversation_id, session_id, model_id_override, created_at) VALUES (?, ?, ?, ?)",
+      ).run(cid, session.session_id, body.model_id_override, now);
+      const msgStmt = db.prepare(
+        `INSERT INTO message (conversation_id, message_id, ordinal, role, parts_json, metadata_json, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const m of body.messages) {
+        msgStmt.run(
+          cid,
+          m.id,
+          m.ordinal,
+          m.role,
+          JSON.stringify(m.parts ?? []),
+          m.metadata !== undefined && m.metadata !== null
+            ? JSON.stringify(m.metadata)
+            : null,
+          now,
+        );
+      }
+      const csStmt = db.prepare(
+        `INSERT INTO connector_state (conversation_id, descriptive_id, active, updated_at)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const cs of body.connector_state) {
+        csStmt.run(cid, cs.descriptive_id, cs.active ? 1 : 0, now);
+      }
+    })();
+  } catch (err) {
+    throw new HotWriteError(err instanceof Error ? err.message : String(err));
+  }
+}
+
 export function deleteConversation(
   record: ConversationRecord,
   session: SessionRecord,

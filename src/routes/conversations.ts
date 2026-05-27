@@ -4,6 +4,7 @@ import {
   createConversation,
   deleteConversation,
   getConversation,
+  hydrateFromColdIfMissing,
   listConnectorsForConversation,
   listConversations,
   listMessages,
@@ -263,6 +264,10 @@ export async function listConversationMessagesHandler(c: Context): Promise<Respo
   const session = c.get("session") as SessionRecord;
   const cid = c.req.param("conversation_id");
   if (!cid) return c.json({ error: "missing_conversation_id" }, 400);
+
+  // Hot may have evicted the conversation; pull it back from cold if so
+  // before the sync lookup.
+  await hydrateFromColdIfMissing(cid, session);
 
   const record = getConversation(cid, session);
   if (!record) return c.json({ error: "conversation_not_found" }, 404);

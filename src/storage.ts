@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { SessionRecord } from "./session-registry.ts";
 
@@ -146,5 +146,43 @@ export function storageFor(session: SessionRecord): Database {
 /** Open the demo (tenant, user) DB at boot so the first write is fast. */
 export function initStorageForDemo(user_id: string): void {
   openHotDb("demo", user_id);
+}
+
+/**
+ * Close and delete the hot SQLite file for one (tenant, user) — the
+ * eviction half of contract-storage-hot's "file lives while any session
+ * is alive" rule. The flush scheduler calls this once it has confirmed
+ * the user has no live sessions AND every conversation has flushed
+ * successfully to cold. A request that arrives after eviction will
+ * reopen the file (empty schema; cold hydration on first
+ * `getConversation`).
+ *
+ * Best-effort: a failure to unlink (e.g. concurrent reader) is logged
+ * and the in-memory entry is still removed — the file may stay on
+ * disk and be reopened later, which is correct under the durability
+ * model (cold has the data; hot is a cache).
+ */
+export function closeAndRemoveHotDb(tenant_id: string, user_id: string): void {
+  const key = dbKey(tenant_id, user_id);
+  const db = opened.get(key);
+  if (db) {
+    try {
+      db.close();
+    } catch {
+      /* already closed */
+    }
+    opened.delete(key);
+  }
+  const path = dbPathFor(tenant_id, user_id);
+  try {
+    rmSync(path, { force: true });
+    // Also remove the WAL sidecar files SQLite creates under WAL mode.
+    rmSync(`${path}-wal`, { force: true });
+    rmSync(`${path}-shm`, { force: true });
+  } catch (err) {
+    console.error(
+      `storage: failed to remove ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 

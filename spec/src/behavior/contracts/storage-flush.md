@@ -17,12 +17,25 @@ links:
 
 # Contract — Flush to cold storage
 
-> [!WARNING] PENDING RECONCILIATION
-> - **Detected**: 2026-05-25 by /code-changed (audit consolidation, augchatd/augchatd#9)
-> - **Sources in conflict**: this contract vs `src/storage.ts:18-22` (lists flush + multi-session lifecycle as "Still pending"), no `src/*flush*` module exists.
-> - **Nature**: the contract reads prescriptive — disconnect + 5-min idle triggers, retry, hydration on resume — but nothing is wired. `SessionRecord.storage` is held opaquely; there is no flush scheduler, no idle timer, no S3 client, no hydration code path.
-> - **Proposed direction**: ship the flush implementation (issue #9 §C2-C4). Until then this block makes the gap explicit so a reader doesn't infer working code from the prescriptive prose. The `Promise` and `Observable outcomes` sections describe the *intended* contract; treat both as target state.
-> - **Decision owner**: project owner.
+> [!NOTE] Implementation status (mostly shipped)
+> Implemented on branch `trace-conversations` via `src/cold-storage.ts`
+> (S3 client + `probeWritability` / `uploadFlush` / `downloadFlush`),
+> `src/flush-scheduler.ts` (per-conversation idle timer with capped
+> exponential backoff and the stalled-flush threshold), and the
+> hydration helper `hydrateFromColdIfMissing` in `conversation-registry.ts`.
+> Boot probe (`probeWritability`) refuses the demo boot on bad creds —
+> production `POST /sessions` runs the same probe per request.
+>
+> The trigger model below is **idle-only** today — 5 minutes (overridable
+> via `AUGCHATD_FLUSH_IDLE_MS`) of quiet since the last `upsertMessages`
+> for a conversation. The "session disconnect" trigger requires the
+> production session lifecycle (which is not wired); demo sessions live
+> for the process lifetime, so idle is the only path that fires.
+>
+> **Still pending:** `noteSessionEnd` — the flush-scheduler call that
+> drives the refcount-driven hot eviction (see contract-storage-hot
+> §"Lifecycle") — has no caller in demo. The function exists; production
+> `POST /sessions` + `DELETE /sessions/:id` minting will wire it.
 
 ## Promise
 

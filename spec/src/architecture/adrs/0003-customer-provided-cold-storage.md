@@ -12,12 +12,25 @@ links:
 
 # ADR 0003 — Cold storage is the integrator's S3-compatible bucket
 
-> [!WARNING] PENDING RECONCILIATION
-> - **Detected**: 2026-05-25 by /code-changed (audit consolidation, augchatd/augchatd#9)
-> - **Sources in conflict**: this ADR's "tests writability / flushes / retries / hydrates" decision vs `src/storage.ts:18` (lists flush + hydration as pending); `SessionRecord.storage` is held as opaque `Record<string, unknown>` in `src/session-registry.ts:30` with no S3 client code anywhere.
-> - **Nature**: the **shape** decision — credentials live in the session payload as `storage.s3 = { endpoint, region, bucket, prefix?, access_key_id, secret_access_key }`, demo config mirrors the same shape — is shipped. The **operational** half (writability probe, flush triggers, retry, hydration, hot-not-dropped guarantee) is not. The decision predates the working code.
-> - **Proposed direction**: ship the operational layer (issue #9 §C2-C4 + [storage-flush PENDING block](../../behavior/contracts/storage-flush.md)). The ADR's shape paragraph is current; the operational paragraph is target state. Remove this block when both halves match.
-> - **Decision owner**: project owner.
+> [!NOTE] Implementation status (shipped — first cut)
+> All four behavioral promises are wired on branch `trace-conversations`:
+>
+> - **Tests writability at session creation**: `probeWritability` in
+>   `src/cold-storage.ts` runs at boot (demo). Production `POST /sessions`
+>   will call the same function per request.
+> - **Flushes on disconnect or 5-min idle**: idle trigger is implemented
+>   in `src/flush-scheduler.ts`. Disconnect trigger requires production
+>   session lifecycle and is not wired in demo.
+> - **Retries failed flushes; does not drop hot until cold confirms**:
+>   exponential backoff in flush-scheduler; `cleanlyFlushed` gate on
+>   eviction in same file.
+> - **Hydrates from S3 on resume**: `hydrateFromColdIfMissing` in
+>   `src/conversation-registry.ts`; called on the slow paths
+>   (`chatHandler` at turn start, `GET /conversations/:cid/messages`).
+>
+> Bucket-side encryption stays the operator's concern (SSE-S3 / SSE-KMS),
+> per the original decision. Tests are still missing — promote to
+> `current` once they land.
 
 ## Context
 

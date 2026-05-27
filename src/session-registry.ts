@@ -1,5 +1,6 @@
 import type { DemoModeConfig, UiTheme } from "./env.ts";
 import type { Connector } from "./connectors.ts";
+import { noteSessionStart } from "./flush-scheduler.ts";
 
 /**
  * In-memory session registry. Source of truth for credentials and scope
@@ -32,6 +33,14 @@ export interface SessionRecord {
   connectors: Connector[];
   /** UI color scheme the bundled UI should render with. */
   theme: UiTheme;
+  /**
+   * Per-session read-only flag (contract-storage-durability). Set by
+   * the flush scheduler when a conversation flush has stalled beyond
+   * the threshold; cleared on the next successful flush. While true,
+   * `POST /chat` returns 503 with `X-Augchatd-Reason: flush-stalled`.
+   * Mutable: the flush scheduler updates this in place.
+   */
+  readonly_flush_stalled: boolean;
 }
 
 const registry = new Map<string, SessionRecord>();
@@ -60,7 +69,9 @@ export function bindDemoSession(
     storage: config.storage,
     connectors: config.connectors,
     theme: config.theme,
+    readonly_flush_stalled: false,
   };
   registerSession(record);
+  noteSessionStart(record);
   return record;
 }

@@ -12,12 +12,27 @@ links:
 
 # Constraint — Storage durability
 
-> [!WARNING] PENDING RECONCILIATION
-> - **Detected**: 2026-05-25 by /code-changed (audit consolidation, augchatd/augchatd#9)
-> - **Sources in conflict**: this constraint vs `src/` (zero references to `flush-stalled`; no read-only mode flag on `SessionRecord`; no retry / backoff path).
-> - **Nature**: read-only mode is unreachable today because the flush whose stall would trigger it is itself unimplemented (see PENDING on [storage-flush](../behavior/contracts/storage-flush.md)). Every "hard rule" below ("hot is not dropped until cold has it", retry with exponential backoff, 15-min stall → 503 `X-Augchatd-Reason: flush-stalled`) is target state.
-> - **Proposed direction**: ship cold flush first (issue #9 §C3), then the read-only state machine on top (#9 §C2). This block makes the prescriptive prose visibly not-yet-true.
-> - **Decision owner**: project owner.
+> [!NOTE] Implementation status (shipped)
+> Implemented on branch `trace-conversations`:
+>
+> - **Retry policy**: `src/flush-scheduler.ts` runs capped exponential
+>   backoff (1s → 60s, default; `AUGCHATD_FLUSH_STALLED_MS` overrides
+>   the stall threshold).
+> - **Read-only mode**: `SessionRecord.readonly_flush_stalled` is set
+>   when failures exceed the threshold. `chatHandler` returns 503 with
+>   `X-Augchatd-Reason: flush-stalled`; the bundled UI's chat transport
+>   detects the header and replaces the composer with the
+>   "Service temporarily read-only — your messages are preserved"
+>   banner (`<FlushStalledBanner />` in `ui/src/App.tsx`). Auto-recovery:
+>   the next successful flush clears the flag, the next /chat returns
+>   200, and the UI re-renders the composer.
+> - **Hot-not-dropped**: `flush-scheduler.ts` only marks a conversation
+>   `cleanlyFlushed = true` on `uploadFlush` success; eviction
+>   (`closeAndRemoveHotDb`) is gated on that flag plus zero live
+>   sessions for `(tenant, user)`.
+>
+> The rules below are now backed by code. Tests are still missing — when
+> they land, this NOTE can come off and the file promotes to `current`.
 
 ## Hard rules
 
