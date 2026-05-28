@@ -1,5 +1,6 @@
 import { BootConfigError, loadBootConfig } from "./env.ts";
 import { createApp } from "./server.ts";
+import { initJwt } from "./jwt.ts";
 import { initMcpConnectors } from "./mcp.ts";
 import { initRagConnectors } from "./rag.ts";
 import { initTrace } from "./trace.ts";
@@ -21,6 +22,7 @@ try {
   throw err;
 }
 
+initJwt(config.jwt_secret);
 initTrace(config.trace_dir);
 
 if (config.mode === "demo" && config.demo) {
@@ -96,6 +98,12 @@ if (config.mode === "demo" && config.demo) {
 }
 if (config.trace_dir) {
   console.log(`  trace: appending per-conversation JSONL to ${config.trace_dir}`);
+}
+if (config.jwt_secret_ephemeral) {
+  console.warn(
+    `  jwt:  AUGCHATD_JWT_SECRET is unset — using an ephemeral secret. ` +
+      `Every restart invalidates open sessions. Set AUGCHATD_JWT_SECRET=$(openssl rand -hex 32) to persist.`,
+  );
 }
 
 export default {

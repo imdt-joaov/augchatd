@@ -5,6 +5,10 @@ status: proposed
 evidence:
   - source: README.md@e562b2b
     section: "README header (iframe snippet) / UI integration"
+  - source: ui/src/App.tsx
+    section: "requestJwtFromParent / getParentOrigin"
+  - source: src/routes/demo-page.ts
+    section: "iframePathFromParent — appends ?parent_origin="
 links:
   - relation: supports
     target: contract-ui-handshake
@@ -41,10 +45,19 @@ Posted in response to each `augchatd:ready`. The `theme` field is OPTIONAL — `
 - The parent **must** target the augchatd origin when sending `augchatd:jwt`.
 - The iframe **must** verify `event.origin` equals its expected parent origin before accepting `augchatd:jwt`.
 
-(The README snippet demonstrates this on the integrator side via `if (e.origin !== 'https://augchatd.your-infra') return;`.)
+### Iframe-side parent-origin discovery
 
-> [!NOTE] Known gap — iframe-side origin discovery in production
-> In demo, the parent and the iframe share the same origin (`http://localhost:<port>`), so the iframe's check reduces to `e.origin === window.location.origin` — correct. In production the parent is on the integrator's origin, which the iframe currently has no out-of-band way to learn. A mechanism (e.g. a query string on the iframe's `src`) needs to land before production handshake is wired. Tracked in augchatd/augchatd#5.
+The integrator embeds the iframe with a `?parent_origin=<their-origin>` query string on the `src`, e.g.:
+
+```html
+<iframe src="https://augchatd.your-infra/?parent_origin=https://app.example.com"></iframe>
+```
+
+The iframe parses `?parent_origin=` once, validates it via `new URL(...)`, and uses the resulting `.origin` as the `targetOrigin` for outbound `postMessage` calls AND as the strict comparison value when filtering inbound `augchatd:jwt`. The demo wrapper (`/demo/`) sets this query string automatically on the iframe `src`, so demo exercises the strict path.
+
+**Degrade mode (back-compat).** If `?parent_origin=` is absent or unparseable, the iframe falls back to `document.referrer`'s origin and logs a one-time `console.warn`. Integrators should not rely on this fallback — it exists so embedders updated before this contract land continue working.
+
+(The README snippet demonstrates the parent side via `if (e.origin !== 'https://augchatd.your-infra') return;`.)
 
 ## Message contract
 

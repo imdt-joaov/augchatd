@@ -360,10 +360,59 @@ function DemoBanner() {
 /** Update the iframe's route and notify the parent so it can mirror the path. */
 function setIframeRoute(path: string): void {
   window.history.replaceState(null, "", path);
-  window.parent.postMessage(
-    { type: "augchatd:route", path },
-    document.referrer,
+  window.parent.postMessage({ type: "augchatd:route", path }, getParentOrigin());
+}
+
+/**
+ * Parent origin used for postMessage targetOrigin and for filtering inbound
+ * messages in the handshake. Read once from `?parent_origin=` on the iframe
+ * URL (the integrator sets this when embedding); if absent, falls back to
+ * `document.referrer`'s origin with a one-time console warning — the
+ * degraded mode is retro-compatible with embedders that haven't been
+ * updated yet, but the strict path is the query-param one.
+ *
+ * Returns the empty string if both sources are missing, in which case
+ * postMessage will throw — which is the right outcome (no silent send).
+ */
+let cachedParentOrigin: string | null = null;
+function getParentOrigin(): string {
+  if (cachedParentOrigin !== null) return cachedParentOrigin;
+  cachedParentOrigin = resolveParentOrigin();
+  return cachedParentOrigin;
+}
+function resolveParentOrigin(): string {
+  const fromQuery = new URLSearchParams(window.location.search).get(
+    "parent_origin",
   );
+  if (fromQuery) {
+    try {
+      const u = new URL(fromQuery);
+      // URL() accepts "https://x.com/path" — we only want the origin.
+      return u.origin;
+    } catch {
+      console.warn(
+        `augchatd: ?parent_origin=${JSON.stringify(fromQuery)} is not a valid URL; ` +
+          `falling back to document.referrer. Postmessage handshake will be permissive.`,
+      );
+    }
+  }
+  const ref = document.referrer;
+  if (ref) {
+    try {
+      const origin = new URL(ref).origin;
+      console.warn(
+        `augchatd: ?parent_origin= missing on iframe URL; using document.referrer (${origin}). ` +
+          `For strict origin checking, embed with src="…?parent_origin=<parent-origin>".`,
+      );
+      return origin;
+    } catch {
+      // referrer was non-empty but unparseable; fall through
+    }
+  }
+  console.warn(
+    `augchatd: no parent_origin and no document.referrer — postMessage handshake cannot run.`,
+  );
+  return "";
 }
 
 /**
@@ -374,9 +423,9 @@ function requestJwtFromParent(
   timeoutMs = 10000,
 ): Promise<{ jwt: string; theme?: "light" | "dark" }> {
   return new Promise((resolve, reject) => {
-    const referrer = document.referrer
+    const parentOrigin = getParentOrigin();
     const handler = (e: MessageEvent) => {
-      // if (e.origin !== referrer) return;
+      if (parentOrigin && e.origin !== parentOrigin) return;
       const d = e.data as { type?: string; jwt?: unknown; theme?: unknown } | undefined;
       if (d?.type !== "augchatd:jwt" || typeof d.jwt !== "string") return;
       window.removeEventListener("message", handler);
@@ -394,7 +443,7 @@ function requestJwtFromParent(
       );
     }, timeoutMs);
     window.addEventListener("message", handler);
-    window.parent.postMessage({ type: "augchatd:ready" }, referrer);
+    window.parent.postMessage({ type: "augchatd:ready" }, parentOrigin);
   });
 }
 

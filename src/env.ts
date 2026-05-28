@@ -53,12 +53,31 @@ export interface BootConfig {
    * tracing disabled (no overhead). Mode-agnostic.
    */
   trace_dir: string | undefined;
+  /**
+   * Symmetric HS256 secret used by src/jwt.ts. In prod, sourced from
+   * AUGCHATD_JWT_SECRET (required, length≥32, not a known placeholder); in
+   * demo, optional — if absent we generate a 32-byte random one and set
+   * `jwt_secret_ephemeral=true`, which boots a warning. Keeping the secret
+   * stable across restarts is what lets a JWT outlive a daemon bounce
+   * until its `exp` (otherwise every restart invalidates every open
+   * session).
+   */
+  jwt_secret: string;
+  jwt_secret_ephemeral: boolean;
 }
 
 const DEFAULT_PORT = 8080;
 const DEFAULT_DEMO_TTL_SECONDS = 60;
+const JWT_SECRET_MIN_LEN = 32;
 
 const PLACEHOLDER_API_KEYS = new Set(["sk-replace-me", "REPLACE_ME"]);
+const PLACEHOLDER_JWT_SECRETS = new Set([
+  "REPLACE_ME",
+  "change-me",
+  "changeme",
+  "secret",
+  "your-secret-here",
+]);
 
 // Identifiers that land in filesystem paths (`user_id`, `tenant_id`). The
 // allowed alphabet mirrors src/storage.ts's `sanitize()` so the validated
@@ -68,13 +87,46 @@ const IDENT_RE = /^[a-zA-Z0-9._-]{1,100}$/;
 
 export function loadBootConfig(): BootConfig {
   const mode = readMode();
+  const { secret, ephemeral } = readJwtSecret(mode);
   return {
     mode,
     port: readPort(),
     demo: mode === "demo" ? readDemoConfig() : undefined,
     demo_ttl_seconds: readDemoTtl(),
     trace_dir: readTraceDir(),
+    jwt_secret: secret,
+    jwt_secret_ephemeral: ephemeral,
   };
+}
+
+function readJwtSecret(mode: AugchatdMode): { secret: string; ephemeral: boolean } {
+  const raw = process.env.AUGCHATD_JWT_SECRET;
+  if (raw && raw.length > 0) {
+    if (raw.length < JWT_SECRET_MIN_LEN) {
+      throw new BootConfigError(
+        `AUGCHATD_JWT_SECRET must be at least ${JWT_SECRET_MIN_LEN} characters (got ${raw.length}). ` +
+          `Generate one with: openssl rand -hex 32`,
+      );
+    }
+    if (PLACEHOLDER_JWT_SECRETS.has(raw)) {
+      throw new BootConfigError(
+        `AUGCHATD_JWT_SECRET is set to a placeholder value (${JSON.stringify(raw)}). ` +
+          `Generate a real one with: openssl rand -hex 32`,
+      );
+    }
+    return { secret: raw, ephemeral: false };
+  }
+  if (mode === "prod") {
+    throw new BootConfigError(
+      `AUGCHATD_JWT_SECRET is required in production mode. ` +
+        `Generate one with: openssl rand -hex 32`,
+    );
+  }
+  // demo: ephemeral fallback. index.ts prints a warning so the operator
+  // sees the implication (every restart invalidates open demo sessions).
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return { secret: Buffer.from(bytes).toString("base64url"), ephemeral: true };
 }
 
 function readMode(): AugchatdMode {

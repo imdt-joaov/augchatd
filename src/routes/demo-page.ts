@@ -64,11 +64,14 @@ const DEMO_PAGE_HTML = `<!doctype html>
     );
   }
   // Real path (not fragment) so the conversation id shows up in server logs.
+  // ?parent_origin= lets the iframe enforce a strict origin check on the
+  // postMessage handshake (same as production embedders should set).
   function iframePathFromParent() {
     const p = window.location.pathname;
-    if (p === PREFIX || p === PREFIX + '/') return '/';
-    if (p.indexOf(PREFIX + '/') === 0) return p.slice(PREFIX.length);
-    return '/';
+    const qs = '?parent_origin=' + encodeURIComponent(origin);
+    if (p === PREFIX || p === PREFIX + '/') return '/' + qs;
+    if (p.indexOf(PREFIX + '/') === 0) return p.slice(PREFIX.length) + qs;
+    return '/' + qs;
   }
   window.addEventListener('message', (e) => {
     if (e.origin !== origin) return;

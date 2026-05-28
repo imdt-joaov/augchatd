@@ -38,7 +38,7 @@ The same handshake runs in both:
 ## Observable outcomes
 
 - A page following the README's snippet completes the initial handshake without modification.
-- The iframe ignores `augchatd:jwt` messages whose `origin` is not the expected parent origin (in demo: same-origin; in production: the integrator origin — discovery mechanism is out-of-band, currently a known gap, see Non-promises).
+- The iframe ignores `augchatd:jwt` messages whose `origin` is not the expected parent origin. The iframe learns the expected origin from `?parent_origin=<origin>` on its own `src` URL (set by the integrator); if missing, it falls back to `document.referrer` with a one-time console warning. See [browser-postmessage](../../contracts/browser-postmessage.md) §Origin checking.
 - The parent ignores `augchatd:ready` from any origin other than the augchatd iframe.
 - The JWT is never put in the iframe URL, in cookies, or in a query string.
 - `augchatd:route` posts from the iframe land at the parent and (in the demo wrapper) update the parent's URL pathname; a subsequent hard reload of the parent URL seeds the iframe at the same route.
@@ -49,7 +49,7 @@ The same handshake runs in both:
 - The handshake does not negotiate auth scheme; the JWT is opaque to the parent page.
 - The handshake does not establish a heartbeat; expiry handling is the [jwt-refresh](jwt-refresh.md) contract (the iframe just re-emits `augchatd:ready`).
 - The handshake is not a public API for custom UIs; the bundled UI is the only supported consumer (see [req-007](../requirements/req-007-bundled-ui.md)).
-- The cross-origin variant of the iframe's parent-origin verification requires the iframe to learn the expected parent origin out-of-band (e.g. a URL query param on the iframe `src`). The mechanism is not specified by this contract today — demo uses same-origin which sidesteps it. **Pending** — tracked as a gap to resolve before production `POST /sessions` is wired.
+- The cross-origin variant of the iframe's parent-origin verification reads `?parent_origin=` from the iframe `src` (see [browser-postmessage](../../contracts/browser-postmessage.md) §Origin checking). Integrators who don't pass it get the degraded `document.referrer` fallback — this is back-compat, not a promise.
 
 ## Tests this contract implies
 
