@@ -10,26 +10,36 @@ import type { McpConnector } from "./connectors.ts";
  * connects to that connector's HTTP/SSE URL with its credentials, lists the
  * server's tools, and exposes those tools to the LLM at chat time.
  *
- * For this first wiring we keep a single global MCP client + tool cache per
- * connector (keyed by descriptive_id). Connections are eager at boot: if a
- * connector's server is down, we log and continue (per the principle
- * articulated on issue augchatd/augchatd#5 — required deps are validated at
- * setup, optional deps fail at use time).
+ * Ownership of the MCP `Client` + `Transport` is per session (see
+ * [adr-...](../spec/src/architecture/) — credentials never leave the session
+ * boundary). The caller (session-registry / index boot) provides a
+ * `Map<descriptive_id, ConnectedMcp>` that this module populates; chat-time
+ * dispatch (`toolsForActiveConnectors`) reads from the same Map.
+ * Connections are best-effort: a connector whose server is down at
+ * session-create time is logged-and-skipped (optional dependency — chat
+ * still works without it).
  */
 
-interface ConnectedMcp {
+export interface ConnectedMcp {
   connector: McpConnector;
   client: Client;
+  /**
+   * Transport reference held so `closeMcpClients` can call
+   * `transport.close()` on session teardown — MCP's `Client` does not
+   * expose its own close method today, but the SDK's Transport does.
+   */
+  transport: StreamableHTTPClientTransport;
   tools: Record<string, Tool>;
 }
 
-const connected = new Map<string, ConnectedMcp>();
-
-export async function initMcpConnectors(connectors: McpConnector[]): Promise<void> {
+export async function initMcpConnectors(
+  connectors: McpConnector[],
+  out: Map<string, ConnectedMcp>,
+): Promise<void> {
   for (const c of connectors) {
     try {
       const conn = await connectMcp(c);
-      connected.set(c.descriptive_id, conn);
+      out.set(c.descriptive_id, conn);
       const toolNames = Object.keys(conn.tools);
       console.log(
         `  mcp[${c.descriptive_id}] connected, tools: ${toolNames.length ? toolNames.join(", ") : "(none)"}`,
@@ -40,6 +50,25 @@ export async function initMcpConnectors(connectors: McpConnector[]): Promise<voi
       // Skip — optional dependency. Chat still works without this connector.
     }
   }
+}
+
+/**
+ * Tear down every connection in `clients`. Used by DELETE /sessions/:id
+ * to release the per-session credentials + sockets. Errors during close
+ * are swallowed: the session is going away regardless, and a transport
+ * that refuses to close is not actionable here.
+ */
+export async function closeMcpClients(
+  clients: Map<string, ConnectedMcp>,
+): Promise<void> {
+  for (const [, conn] of clients) {
+    try {
+      await conn.transport.close();
+    } catch {
+      // best-effort
+    }
+  }
+  clients.clear();
 }
 
 async function connectMcp(c: McpConnector): Promise<ConnectedMcp> {
@@ -111,7 +140,7 @@ async function connectMcp(c: McpConnector): Promise<ConnectedMcp> {
     );
   }
 
-  return { connector: c, client, tools };
+  return { connector: c, client, transport, tools };
 }
 
 /**
@@ -123,6 +152,7 @@ async function connectMcp(c: McpConnector): Promise<ConnectedMcp> {
  * conversation in hand), we fall back to `default_active`.
  */
 export function toolsForActiveConnectors(
+  clients: Map<string, ConnectedMcp>,
   connectors: McpConnector[],
   activeMap?: Map<string, boolean>,
 ): Record<string, Tool> {
@@ -130,7 +160,7 @@ export function toolsForActiveConnectors(
   for (const c of connectors) {
     const active = activeMap ? (activeMap.get(c.descriptive_id) ?? c.default_active) : c.default_active;
     if (!active) continue;
-    const entry = connected.get(c.descriptive_id);
+    const entry = clients.get(c.descriptive_id);
     if (!entry) continue;
     Object.assign(out, entry.tools);
   }

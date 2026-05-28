@@ -20,13 +20,11 @@ import type { RagConnector } from "./connectors.ts";
  * skipped (optional dependency — chat still works without retrieval).
  */
 
-interface ConnectedRag {
+export interface ConnectedRag {
   connector: RagConnector;
   baseHeaders: Record<string, string>;
   tools: Record<string, Tool>;
 }
-
-const connected = new Map<string, ConnectedRag>();
 
 const DEFAULT_TOP_K = 5;
 
@@ -48,24 +46,33 @@ export interface RagHit {
   snippet: string;
 }
 
-const hitsByToolCall = new Map<string, RagHit[]>();
-
 /**
- * Read and remove the hits stored for `toolCallId`. The chat handler
- * calls this once per retrieve tool result inside `onStepFinish`. Any
- * hits left behind would be a memory leak — the Map is cleared on read.
+ * Read and remove the hits stored for `toolCallId` from the per-session
+ * `hitsMap`. The chat handler calls this once per retrieve tool result
+ * inside `onStepFinish`. Any hits left behind would be a memory leak —
+ * the Map is cleared on read.
  */
-export function consumeRagHits(toolCallId: string): RagHit[] {
-  const hits = hitsByToolCall.get(toolCallId) ?? [];
-  hitsByToolCall.delete(toolCallId);
+export function consumeRagHits(
+  hitsMap: Map<string, RagHit[]>,
+  toolCallId: string,
+): RagHit[] {
+  const hits = hitsMap.get(toolCallId) ?? [];
+  hitsMap.delete(toolCallId);
   return hits;
 }
 
-export async function initRagConnectors(connectors: RagConnector[]): Promise<void> {
+export async function initRagConnectors(
+  connectors: RagConnector[],
+  clientsOut: Map<string, ConnectedRag>,
+  hitsOut: Map<string, RagHit[]>,
+): Promise<void> {
   for (const c of connectors) {
     try {
-      const conn = await connectRag(c);
-      connected.set(c.descriptive_id, conn);
+      // hitsOut is captured by the retrieve tool's `execute` closure (see
+      // connectRag), so each per-session client writes hits into the
+      // session's own Map — never into a module-level singleton.
+      const conn = await connectRag(c, hitsOut);
+      clientsOut.set(c.descriptive_id, conn);
       console.log(
         `  rag[${c.descriptive_id}] connected (${c.backend}), indexes: ${c.indexes.join(", ")}`,
       );
@@ -76,7 +83,10 @@ export async function initRagConnectors(connectors: RagConnector[]): Promise<voi
   }
 }
 
-async function connectRag(c: RagConnector): Promise<ConnectedRag> {
+async function connectRag(
+  c: RagConnector,
+  hitsMap: Map<string, RagHit[]>,
+): Promise<ConnectedRag> {
   const baseHeaders = buildAuthHeaders(c.auth);
   baseHeaders["Content-Type"] = "application/json";
 
@@ -158,10 +168,11 @@ async function connectRag(c: RagConnector): Promise<ConnectedRag> {
         return `retrieval error: HTTP ${r.status} ${text.slice(0, 200)}`;
       }
       const data = (await r.json()) as OpenSearchResponse;
-      // Capture structured hits for the UI side-channel. The chat
+      // Capture structured hits for the UI side-channel into the
+      // session-owned Map captured at session creation. The chat
       // handler reads these in onStepFinish and emits one
       // source-document part per hit (see consumeRagHits + chat.ts).
-      hitsByToolCall.set(toolCallId, parseHitsForUi(data, c));
+      hitsMap.set(toolCallId, parseHitsForUi(data, c));
       return formatHits(data, c.indexes);
     },
   });
@@ -312,6 +323,7 @@ function parseHitsForUi(data: OpenSearchResponse, c: RagConnector): RagHit[] {
 }
 
 export function toolsForActiveRagConnectors(
+  clients: Map<string, ConnectedRag>,
   connectors: RagConnector[],
   activeMap?: Map<string, boolean>,
 ): Record<string, Tool> {
@@ -319,7 +331,7 @@ export function toolsForActiveRagConnectors(
   for (const c of connectors) {
     const active = activeMap ? (activeMap.get(c.descriptive_id) ?? c.default_active) : c.default_active;
     if (!active) continue;
-    const entry = connected.get(c.descriptive_id);
+    const entry = clients.get(c.descriptive_id);
     if (!entry) continue;
     Object.assign(out, entry.tools);
   }

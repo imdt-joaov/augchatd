@@ -111,8 +111,8 @@ export async function chatHandler(c: Context): Promise<Response> {
   const mcpConnectors = session.connectors.filter((c) => c.type === "mcp");
   const ragConnectors = session.connectors.filter((c) => c.type === "rag");
   const tools = {
-    ...toolsForActiveConnectors(mcpConnectors, activeMap),
-    ...toolsForActiveRagConnectors(ragConnectors, activeMap),
+    ...toolsForActiveConnectors(session.mcpClients, mcpConnectors, activeMap),
+    ...toolsForActiveRagConnectors(session.ragClients, ragConnectors, activeMap),
   };
 
   const messages = await convertToModelMessages(body.messages);
@@ -214,7 +214,7 @@ export async function chatHandler(c: Context): Promise<Response> {
           const sourceDocsEmitted: Array<{ sourceId: string; title: string }> = [];
           for (const tr of step.toolResults ?? []) {
             if (!tr.toolName.endsWith("__retrieve")) continue;
-            const hits = consumeRagHits(tr.toolCallId);
+            const hits = consumeRagHits(session.ragHitsByToolCall, tr.toolCallId);
             for (const h of hits) {
               const sourceId = `${tr.toolCallId}:${h.doc_id}`;
               writer.write({

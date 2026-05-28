@@ -6,6 +6,10 @@ capability: cap-session-mgmt
 evidence:
   - source: README.md@e562b2b
     section: "README header / How it works (step 1) / Storage"
+  - source: src/routes/sessions.ts
+    section: "createSessionHandler (POST /sessions handler)"
+  - source: src/session-registry.ts
+    section: "bindSession (per-session connector ownership)"
 links:
   - relation: satisfies
     target: req-001-per-user-credentials

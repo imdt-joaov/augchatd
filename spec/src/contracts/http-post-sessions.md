@@ -7,9 +7,15 @@ evidence:
     section: "README header (curl example) / How it works (step 1)"
   - source: README.md
     section: "README header (ttl_seconds note)"
+  - source: src/routes/sessions.ts
+    section: "createSessionHandler"
+  - source: src/server.ts
+    section: "POST /sessions mount (prod && trusted_proxy)"
 links:
   - relation: supports
     target: contract-session-create
+  - relation: depends_on
+    target: adr-0012-out-of-process-tls
 ---
 
 # Technical contract — `POST /sessions`
@@ -17,6 +23,10 @@ links:
 ## Auth
 
 **mTLS.** Client certificate is required and identifies the mTLS tenant — used to partition **hot** storage. Cold storage is specified per session via `storage.s3` and is not partitioned by the mTLS tenant.
+
+TLS is terminated **out-of-process** by a reverse proxy (see [adr-0012-out-of-process-tls](../architecture/adrs/0012-out-of-process-tls.md)). The proxy forwards `X-Client-Cert-Verify` + `X-Client-Cert-Subject` to augchatd; the cert's `O` (Organization) attribute becomes the `tenantId`. The route is only mounted when the operator sets `TRUSTED_PROXY=true` — without it, the route 404s (preventing a forgotten-proxy deploy from accepting unauthenticated session-create requests).
+
+The body's `user_id` is required and authoritative — the integrator's backend tells augchatd which of THEIR users this session is for. The cert's `CN` is parsed for sanity (the middleware rejects malformed/empty CNs) but is not the source of truth.
 
 ## Request
 

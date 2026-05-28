@@ -7,6 +7,19 @@ import { initTrace } from "./trace.ts";
 import { initStorageForDemo } from "./storage.ts";
 import { listProviderModels } from "./provider-models.ts";
 import { coldStorageConfigFrom, probeWritability } from "./cold-storage.ts";
+import type { SessionConnectorState } from "./session-registry.ts";
+
+// Shared MCP/RAG client storage for demo mode. Every /demo/sessions mint
+// references these Maps by reference (bindDemoSession), so the MCP
+// handshake only happens once per process — demo's 401-recovery loop
+// can re-mint without paying connector setup cost. In prod, each
+// /sessions POST allocates its own per-session Maps and never touches
+// this struct.
+const demoShared: SessionConnectorState = {
+  mcpClients: new Map(),
+  ragClients: new Map(),
+  ragHitsByToolCall: new Map(),
+};
 
 // Wrap the boot-config load so a BootConfigError prints just `err.message`
 // (no Bun stack) and exits 1 — the missing-file `cp` hint and the
@@ -71,17 +84,25 @@ if (config.mode === "demo" && config.demo) {
   // conversation/chat request — avoids first-request latency spike.
   initStorageForDemo(config.demo.user_id);
   // MCP and RAG clients are expensive (handshake, persistent connection)
-  // — initialize them once at boot. Each POST /demo/sessions mints a
-  // SessionRecord with its own connector array, but the clients are
-  // shared via the module-level registry in mcp.ts / rag.ts (keyed by
-  // descriptive_id).
+  // — initialize them once at boot into shared per-tenant Maps. Each
+  // POST /demo/sessions mints a SessionRecord that references these
+  // shared Maps by *reference* (demo is single-tenant by design, see
+  // bindDemoSession). In prod, POST /sessions instead allocates fresh
+  // per-session Maps and calls these same init functions against them
+  // — credentials never leave the session boundary.
   const mcpConnectors = config.demo.connectors.filter((c) => c.type === "mcp");
   const ragConnectors = config.demo.connectors.filter((c) => c.type === "rag");
-  if (mcpConnectors.length > 0) await initMcpConnectors(mcpConnectors);
-  if (ragConnectors.length > 0) await initRagConnectors(ragConnectors);
+  if (mcpConnectors.length > 0)
+    await initMcpConnectors(mcpConnectors, demoShared.mcpClients);
+  if (ragConnectors.length > 0)
+    await initRagConnectors(
+      ragConnectors,
+      demoShared.ragClients,
+      demoShared.ragHitsByToolCall,
+    );
 }
 
-const app = createApp(config);
+const app = createApp(config, demoShared);
 
 // Boot banner — `mode` is also exposed via GET /healthz, which is the
 // canonical signal an operator should gate production deploys on (per
