@@ -61,6 +61,13 @@ export interface SessionRecord extends SessionConnectorState {
    * Mutable: the flush scheduler updates this in place.
    */
   readonly_flush_stalled: boolean;
+  /**
+   * Session-wide abort signal. The chat handler merges this with the
+   * per-request signal so a forced DELETE /sessions/:id can interrupt
+   * the in-flight LLM stream + tool calls immediately (per the user's
+   * choice: abort, not wait — see contract-session-delete).
+   */
+  abortController: AbortController;
 }
 
 const registry = new Map<string, SessionRecord>();
@@ -109,6 +116,7 @@ export function bindDemoSession(
     mcpClients: shared.mcpClients,
     ragClients: shared.ragClients,
     ragHitsByToolCall: shared.ragHitsByToolCall,
+    abortController: new AbortController(),
   };
   registerSession(record);
   noteSessionStart(record);
@@ -146,6 +154,7 @@ export function bindSession(input: {
     mcpClients: new Map(),
     ragClients: new Map(),
     ragHitsByToolCall: new Map(),
+    abortController: new AbortController(),
   };
   registerSession(record);
   noteSessionStart(record);

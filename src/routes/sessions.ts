@@ -1,12 +1,17 @@
 import type { Context } from "hono";
 import { z } from "zod";
 import { mintJwt } from "../jwt.ts";
-import { bindSession } from "../session-registry.ts";
-import { initMcpConnectors } from "../mcp.ts";
+import {
+  bindSession,
+  getSession,
+  unregisterSession,
+} from "../session-registry.ts";
+import { closeMcpClients, initMcpConnectors } from "../mcp.ts";
 import { initRagConnectors } from "../rag.ts";
 import { parseConnectors } from "../connectors.ts";
 import { listProviderModels } from "../provider-models.ts";
 import { coldStorageConfigFrom, probeWritability } from "../cold-storage.ts";
+import { flushAllForSession, noteSessionEnd } from "../flush-scheduler.ts";
 import type { Identity, IdentityVars } from "../identity.ts";
 import type { MtlsTrustVars } from "../mtls-trust.ts";
 import type { UiTheme } from "../env.ts";
@@ -170,4 +175,93 @@ export function createSessionHandler(ttlSeconds: number) {
     const { jwt, expires_at } = await mintJwt(sessionId, ttlSeconds);
     return c.json({ session_id: sessionId, jwt, expires_at });
   };
+}
+
+/**
+ * DELETE /sessions/:session_id — forced logout (contract-session-delete).
+ *
+ * Idempotent: an unknown session id returns 204 (the caller asked us to
+ * make it gone; if it's already gone, we are done). Cross-tenant
+ * delete is rejected with 403 — the integrator can only delete sessions
+ * minted under their own mTLS tenant. Once authorized:
+ *
+ *   1. session.abortController.abort() — interrupt any in-flight chat
+ *      (LLM stream + tool calls). The chat handler's `onFinish`
+ *      callback still fires and persists the partial response to hot
+ *      SQLite, so we don't lose the streamed-so-far data.
+ *   2. closeMcpClients — close transports per connector so the upstream
+ *      MCP server sees the disconnect.
+ *   3. flushAllForSession — synchronously serialize and upload every
+ *      conversation owned by (tenant, user). Best-effort; a failing
+ *      flush logs and leaves the retry timer armed, but the session
+ *      removal proceeds.
+ *   4. unregisterSession + noteSessionEnd — drop the in-memory record
+ *      and adjust the per-user session refcount. If this was the last
+ *      live session for the user AND every conversation flushed, the
+ *      flush scheduler closes + removes the hot SQLite file.
+ *
+ * After step 4, a subsequent chat request bearing the same JWT 401s with
+ * `session_gone` — same recovery path as natural JWT expiry.
+ */
+export async function deleteSessionHandler(
+  c: Context<{ Variables: MtlsTrustVars & IdentityVars }>,
+): Promise<Response> {
+  const identity = c.var.identity as Identity;
+  const sessionId = c.req.param("session_id");
+  if (!sessionId) {
+    return c.json({ error: "missing_session_id" }, 400);
+  }
+  const session = getSession(sessionId);
+  if (!session) {
+    // Unknown session id (never existed, already deleted, or expired).
+    // Per contract-session-delete: 404 with no side effects.
+    return c.json({ error: "session_not_found" }, 404);
+  }
+  if (session.tenant_id !== identity.tenantId) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  // 1. Abort any in-flight chat turn for this session. Done BEFORE
+  //    flushing so the chat handler's onFinish callback (which persists
+  //    the partial assistant response to hot SQLite) runs before we
+  //    serialize.
+  session.abortController.abort();
+  // Give the chat handler's onFinish a tick to land its upsertMessages
+  // call. The abort propagates synchronously to streamText, but its
+  // onFinish runs on a microtask — without this yield, the flush below
+  // could serialize hot SQLite before the partial assistant message
+  // lands. A microtask is enough; we don't want to introduce real
+  // latency on the DELETE path.
+  await Promise.resolve();
+
+  // 2. Synchronous final flush. If it can't confirm success within the
+  //    request deadline (or any conversation's last attempt failed),
+  //    refuse to release the session — the integrator may retry. The
+  //    failed conversation's retry timer is left armed so a later
+  //    success still lands the data even if no retry comes.
+  const allFlushed = await flushAllForSession(session);
+  if (!allFlushed) {
+    return c.json(
+      {
+        error: "flush_failed",
+        detail:
+          "Final flush to cold storage did not confirm success. The session is not released; retry the DELETE.",
+      },
+      503,
+    );
+  }
+
+  // 3. Close MCP transports (RAG has no socket lifecycle — its tools
+  //    are pure-function wrappers around fetch, so dropping the record
+  //    is sufficient cleanup). Done AFTER the flush so that if a future
+  //    flush refactor needs to read connector state from the session,
+  //    it still can.
+  await closeMcpClients(session.mcpClients);
+
+  // 4. Drop the in-memory record and adjust refcount (may trigger hot
+  //    eviction via noteSessionEnd → maybeEvict).
+  unregisterSession(sessionId);
+  noteSessionEnd(session);
+
+  return c.body(null, 204);
 }

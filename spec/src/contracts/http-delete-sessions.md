@@ -5,9 +5,15 @@ status: proposed
 evidence:
   - source: README.md
     section: "Token & credential refresh — Forced logout"
+  - source: src/routes/sessions.ts
+    section: "deleteSessionHandler"
+  - source: src/server.ts
+    section: "DELETE /sessions/:session_id mount (prod && trusted_proxy)"
 links:
   - relation: supports
     target: contract-session-delete
+  - relation: depends_on
+    target: adr-0012-out-of-process-tls
 ---
 
 # Technical contract — `DELETE /sessions/:session_id`

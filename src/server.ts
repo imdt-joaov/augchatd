@@ -15,7 +15,7 @@ import {
   setConversationReasoningHandler,
 } from "./routes/conversations.ts";
 import { listSessionModelsHandler } from "./routes/models.ts";
-import { createSessionHandler } from "./routes/sessions.ts";
+import { createSessionHandler, deleteSessionHandler } from "./routes/sessions.ts";
 import { requireSession } from "./auth.ts";
 import { requireMtlsTrust } from "./mtls-trust.ts";
 import { requireIdentity } from "./identity.ts";
@@ -47,7 +47,7 @@ import type { SessionConnectorState } from "./session-registry.ts";
  *   - POST /sessions     — exposed iff TRUSTED_PROXY=true (gated by
  *                          requireMtlsTrust + requireIdentity)
  *   - POST /chat, conversation CRUD, /session/models — JWT-bearer
- *   - DELETE /sessions/:id — to come (PR D)
+ *   - DELETE /sessions/:id — exposed iff TRUSTED_PROXY=true (same gate)
  */
 const API_PATHS = ["/healthz", "/demo", "/chat", "/sessions", "/conversations", "/session"];
 
@@ -123,6 +123,12 @@ export function createApp(
       requireMtlsTrust,
       requireIdentity,
       createSessionHandler(config.demo_ttl_seconds),
+    );
+    app.delete(
+      "/sessions/:session_id",
+      requireMtlsTrust,
+      requireIdentity,
+      deleteSessionHandler,
     );
     // JWT-bearer chat-time routes: same handlers as demo, just behind
     // the production session-creation gate.

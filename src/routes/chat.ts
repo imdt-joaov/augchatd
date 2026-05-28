@@ -197,13 +197,19 @@ export async function chatHandler(c: Context): Promise<Response> {
           modelId,
           reasoningEnabled,
         ) as Parameters<typeof streamText>[0]["providerOptions"],
-        // Propagate client disconnect to the upstream provider and to any
-        // tool calls in flight. Without this the LLM + every MCP / RAG
-        // fetch run to completion after the browser closes, burning
-        // tokens and connector quota. The AI SDK forwards this signal to
+        // Propagate (a) client disconnect and (b) session-wide abort to
+        // the upstream provider and to any tool calls in flight. Without
+        // (a), the LLM + every MCP / RAG fetch run to completion after
+        // the browser closes, burning tokens and connector quota. (b) is
+        // fired by DELETE /sessions/:id — the integrator's forced-logout
+        // path interrupts the in-flight turn immediately (contract-
+        // session-delete). The AI SDK forwards this signal to
         // tool.execute()'s second arg too — mcp.ts and rag.ts use it to
         // abort their own upstream calls.
-        abortSignal: c.req.raw.signal,
+        abortSignal: AbortSignal.any([
+          c.req.raw.signal,
+          session.abortController.signal,
+        ]),
         tools: Object.keys(tools).length > 0 ? tools : undefined,
         stopWhen: stepCountIs(MAX_STEPS),
         onStepFinish: (step) => {

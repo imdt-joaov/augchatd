@@ -6,6 +6,10 @@ capability: cap-session-mgmt
 evidence:
   - source: README.md
     section: "Token & credential refresh — Forced logout"
+  - source: src/routes/sessions.ts
+    section: "deleteSessionHandler"
+  - source: src/flush-scheduler.ts
+    section: "flushAllForSession (returns false on failure → 503)"
 links:
   - relation: depends_on
     target: contract-session-create
@@ -16,13 +20,6 @@ links:
 ---
 
 # Contract — Session delete (forced logout)
-
-> [!WARNING] PENDING RECONCILIATION
-> - **Detected**: 2026-05-25 by /code-changed (audit consolidation, augchatd/augchatd#9)
-> - **Sources in conflict**: this contract + `adr-0005-jwt-signature-only:37` ("Immediate revocation available via DELETE /sessions/:id") vs `src/server.ts:33-34` (route explicitly `NOT mounted (returns 404 by default)`) and `src/session-registry.ts` (no `deleteSession()` export).
-> - **Nature**: the contract reads as if the route exists; the production HTTP surface mounts nothing — every `DELETE /sessions/*` returns Hono's default 404. The mTLS half is also unimplemented, so even mounting the route would not satisfy the "mTLS-authenticated delete" promise.
-> - **Proposed direction**: track behind production session minting (`POST /sessions` itself is unmounted). When that lands, add `deleteSession()` to `session-registry`, mount the route, and remove this block. Until then, the prescriptive prose is target state.
-> - **Decision owner**: project owner.
 
 ## Promise
 

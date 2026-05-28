@@ -127,6 +127,66 @@ export function noteConversationActivity(cid: string, session: SessionRecord): v
   states.set(cid, state);
 }
 
+/**
+ * Synchronously flush every conversation owned by `(session.tenant_id,
+ * session.user_id)`. Used by DELETE /sessions/:id to honor the
+ * contract-session-delete promise ("flushes any unflushed conversation
+ * state to cold first, then drops the in-memory session").
+ *
+ * Returns `true` iff every targeted conversation is `cleanlyFlushed`
+ * after the attempt. A `false` return tells the caller (the DELETE
+ * handler) to refuse to release the session (per contract-session-delete:
+ * "5xx if the final flush to cold cannot be confirmed within the
+ * request deadline; the session is not released — the integrator may
+ * retry"). The failed conversation's retry timer is left armed so a
+ * later success still lands the data, but the session itself stays
+ * registered so a retry of the DELETE can re-attempt.
+ *
+ * A session with no cold-storage-configured conversations (hot-only,
+ * or no chat activity) returns `true` trivially — there is nothing to
+ * flush.
+ */
+export async function flushAllForSession(session: SessionRecord): Promise<boolean> {
+  const cids: string[] = [];
+  for (const s of states.values()) {
+    if (s.tenant === session.tenant_id && s.user === session.user_id) {
+      cids.push(s.cid);
+    }
+  }
+  for (const cid of cids) {
+    const s = states.get(cid);
+    if (!s) continue;
+    // Cancel pending timers so they don't race the synchronous attempt.
+    if (s.idleTimer) {
+      clearTimeout(s.idleTimer);
+      s.idleTimer = null;
+    }
+    if (s.retryTimer) {
+      clearTimeout(s.retryTimer);
+      s.retryTimer = null;
+    }
+    try {
+      await attemptFlush(cid);
+    } catch (err) {
+      // attemptFlush handles its own errors internally (sets retryTimer);
+      // this catch is defense in depth in case a future refactor lets one
+      // escape — we still want to continue flushing other conversations.
+      console.error(
+        `flush: final flush threw for ${cid}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+  // Re-inspect: every cid we targeted must now be cleanlyFlushed.
+  for (const cid of cids) {
+    const s = states.get(cid);
+    if (!s) continue;
+    if (!s.cleanlyFlushed) return false;
+  }
+  return true;
+}
+
 /** Reference-count tracking — call when a session record is registered. */
 export function noteSessionStart(session: SessionRecord): void {
   const k = userKey(session.tenant_id, session.user_id);
