@@ -64,6 +64,16 @@ export interface BootConfig {
    */
   jwt_secret: string;
   jwt_secret_ephemeral: boolean;
+  /**
+   * Operator's explicit promise that augchatd is only reachable through
+   * the trusted reverse proxy that terminates mTLS (see
+   * [adr-0012-out-of-process-tls]). When true, the mTLS middlewares trust
+   * `X-Client-Cert-Verify` / `X-Client-Cert-Subject` headers as the proxy
+   * supplied them. When false in prod, the mTLS-protected control-plane
+   * routes refuse to mount — preventing a forgotten-proxy deploy from
+   * silently accepting unauthenticated session-create requests.
+   */
+  trusted_proxy: boolean;
 }
 
 const DEFAULT_PORT = 8080;
@@ -96,7 +106,18 @@ export function loadBootConfig(): BootConfig {
     trace_dir: readTraceDir(),
     jwt_secret: secret,
     jwt_secret_ephemeral: ephemeral,
+    trusted_proxy: readTrustedProxy(),
   };
+}
+
+function readTrustedProxy(): boolean {
+  const raw = process.env.TRUSTED_PROXY?.toLowerCase();
+  if (raw === undefined || raw === "") return false;
+  if (raw === "true" || raw === "1") return true;
+  if (raw === "false" || raw === "0") return false;
+  throw new BootConfigError(
+    `TRUSTED_PROXY must be "true"/"1" or "false"/"0" (got ${JSON.stringify(raw)})`,
+  );
 }
 
 function readJwtSecret(mode: AugchatdMode): { secret: string; ephemeral: boolean } {

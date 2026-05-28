@@ -23,7 +23,7 @@ Cross-cutting rules that hold across every capability.
 
 ## Transport
 
-- **Backend → augchatd**: mTLS for `POST /sessions`. The client certificate identifies the mTLS tenant.
+- **Backend → augchatd**: mTLS for `POST /sessions` and `DELETE /sessions/:id`. TLS is terminated **out-of-process** by a reverse proxy (see [adr-0012-out-of-process-tls](../architecture/adrs/0012-out-of-process-tls.md)); the proxy validates the client cert against its CA bundle and forwards `X-Client-Cert-Verify` + `X-Client-Cert-Subject` to augchatd. The client certificate identifies the mTLS tenant: by default, `O` → `tenantId`, `CN` → `userId`.
 - **Browser → augchatd**: JWT (Bearer) over the same origin as the bundled UI.
 - **augchatd → MCP**: HTTP or SSE, with per-session auth (typically `bearer`). No stdio.
 - **augchatd → LLM**: Whatever the Vercel AI SDK uses for that provider; key is per session.

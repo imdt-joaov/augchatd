@@ -9,12 +9,13 @@ evidence:
 
 # Components
 
-augchatd is a **single binary** that contains everything below.
+augchatd is a **single binary** that contains everything below. TLS is **not** terminated by augchatd itself — see [adr-0012-out-of-process-tls](adrs/0012-out-of-process-tls.md). A reverse proxy (the deployment's choice; we ship a sample for nginx in [`docs/deployment/nginx.conf.example`](../../../docs/deployment/nginx.conf.example)) terminates mTLS for the control-plane leg and forwards `X-Client-Cert-Verify` + `X-Client-Cert-Subject` to augchatd. The diagram below shows the augchatd process in isolation; in production it sits behind the reverse proxy.
 
 ```
 augchatd process
 ├── HTTP API layer (Hono)
-│   ├── mTLS endpoints: POST /sessions, DELETE /sessions/:id
+│   ├── mTLS-protected endpoints: POST /sessions, DELETE /sessions/:id
+│   │     (mounted only when TRUSTED_PROXY=true; gated by requireMtlsTrust + requireIdentity)
 │   ├── demo endpoints (mode=demo only):
 │   │     GET  /demo, /demo/*   ← wrapper page (iframes the UI, runs the
 │   │                              postMessage handshake; wildcard so
@@ -86,3 +87,4 @@ See ADRs:
 - [0008 — Demo mode shares the production binary](adrs/0008-demo-mode-shares-binary.md)
 - [0009 — React + Vite bundled UI](adrs/0009-react-vite-bundled-ui.md)
 - [0010 — Unified connector model](adrs/0010-unified-connector-model.md)
+- [0012 — TLS is terminated out-of-process](adrs/0012-out-of-process-tls.md)

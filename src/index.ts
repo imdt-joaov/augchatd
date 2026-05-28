@@ -105,6 +105,12 @@ if (config.jwt_secret_ephemeral) {
       `Every restart invalidates open sessions. Set AUGCHATD_JWT_SECRET=$(openssl rand -hex 32) to persist.`,
   );
 }
+if (config.mode === "prod" && !config.trusted_proxy) {
+  console.warn(
+    `  mtls: TRUSTED_PROXY is not set — mTLS control-plane routes will not be mounted. ` +
+      `See docs/deployment/nginx.conf.example and adr-0012-out-of-process-tls.`,
+  );
+}
 
 export default {
   port: config.port,
