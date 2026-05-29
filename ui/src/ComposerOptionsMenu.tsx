@@ -44,6 +44,14 @@ export function ComposerOptionsMenu({
   const [reasoningEnabled, setReasoningEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Open state — externally controllable via `augchatd:open-model-picker`
+  // (fired by the `/model` slash command).
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("augchatd:open-model-picker", handler);
+    return () => window.removeEventListener("augchatd:open-model-picker", handler);
+  }, []);
 
   const loadModels = useCallback(async () => {
     try {
@@ -132,9 +140,9 @@ export function ComposerOptionsMenu({
   const reasoningTooltip = reasoningTooltipFor(currentModelId);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" aria-label="Composer options">
+        <Button variant="ghost" size="sm" aria-label="Composer options">
           <Zap className="size-3.5" aria-hidden />
           <span className="max-w-[160px] truncate">
             {currentModel?.display_name ?? currentModelId ?? "Model…"}

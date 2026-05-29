@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bot, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Bot,
+  Brain,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  HelpCircle,
+  Mic,
+  MicOff,
+  Plus,
+  Quote as QuoteIcon,
+  Slash as SlashIcon,
+  Volume2,
+  VolumeX,
+  Wrench,
+  X,
+  Zap,
+} from "lucide-react";
 import {
   ActionBarPrimitive,
   AssistantRuntimeProvider,
@@ -7,9 +24,13 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  // useAui,
+  SelectionToolbarPrimitive,
+  AuiIf,
+  WebSpeechDictationAdapter,
+  WebSpeechSynthesisAdapter,
+  unstable_useSlashCommandAdapter,
+  useAui,
   useAuiState,
-  useMessage,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
 import {
@@ -17,25 +38,36 @@ import {
   useChatRuntime,
 } from "@assistant-ui/react-ai-sdk";
 import { MarkdownText } from "./Markdown.tsx";
-import { ToolCallBlock, ToolGroup } from "./blocks/ToolCallBlock.tsx";
+import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
+import { Reasoning } from "@/components/assistant-ui/reasoning";
+import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
+import { SLASH_COMMANDS, SLASH_COMMAND_LIST } from "./blocks/slash-commands";
 import { SourceBlock } from "./blocks/SourceBlock.tsx";
 import { ConnectorsMenu } from "./ConnectorsMenu.tsx";
 import { ComposerOptionsMenu } from "./ComposerOptionsMenu.tsx";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { ThreadListSidebar } from "@/components/assistant-ui/threadlist-sidebar";
+import { cn } from "@/lib/utils";
 import { createAuthedFetch, type AuthedFetch, type RefreshJwt } from "@/lib/authedFetch";
 import {
   createHistoryAdapter,
@@ -53,10 +85,22 @@ interface HealthState {
   status: string;
 }
 
-const SUGGESTIONS = [
-  "Show me a Mermaid flowchart for an HTTP request.",
-  "Render a small JSON object for a user record.",
-  "Explain Euler's identity with LaTeX.",
+const STATIC_SUGGESTIONS = [
+  {
+    title: "Mermaid",
+    label: "diagram",
+    prompt: "Show me a Mermaid flowchart for an HTTP request.",
+  },
+  {
+    title: "JSON",
+    label: "structure",
+    prompt: "Render a small JSON object for a user record.",
+  },
+  {
+    title: "Math",
+    label: "LaTeX",
+    prompt: "Explain Euler's identity with LaTeX.",
+  },
 ];
 
 /**
@@ -226,17 +270,79 @@ function AugchatdRuntime({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <UrlSync />
+      <SlashCommandHandlers />
+      <HelpDialog />
       <SidebarProvider defaultOpen className="h-full min-h-0">
         <ThreadListSidebar collapsible="offcanvas" />
-        <SidebarInset className="flex min-h-0 flex-col">
-          <header className="flex h-10 shrink-0 items-center gap-2 border-b px-2">
-            <SidebarTrigger className="-ml-1" />
+        <SidebarInset className="min-h-0">
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-2 absolute top-0 left-0 right-1.25 z-10">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarTrigger className="-ml-1" />
+              </TooltipTrigger>
+              <TooltipContent>Toggle sidebar</TooltipContent>
+            </Tooltip>
           </header>
           {health.mode === "demo" && <DemoBanner />}
-          <ChatView authedFetch={authedFetch} flushStalled={flushStalled} />
+          <ChatView />
+          {flushStalled ? (
+            <FlushStalledBanner />
+          ) : (
+            <Composer authedFetch={authedFetch} />
+          )}
         </SidebarInset>
       </SidebarProvider>
     </AssistantRuntimeProvider>
+  );
+}
+
+/**
+ * Listens for `augchatd:new-thread` (fired by the `/clear` slash command)
+ * and switches to a fresh thread via the assistant-ui runtime. Lives
+ * inside `AssistantRuntimeProvider` so `useAui()` has access.
+ *
+ * `/model` and `/connectors` are handled in their respective dropdown
+ * components (which already mount inside the same provider).
+ */
+function SlashCommandHandlers() {
+  const aui = useAui();
+  useEffect(() => {
+    const handler = () => {
+      aui.threads().switchToNewThread();
+    };
+    window.addEventListener("augchatd:new-thread", handler);
+    return () => window.removeEventListener("augchatd:new-thread", handler);
+  }, [aui]);
+  return null;
+}
+
+function HelpDialog() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("augchatd:open-help", handler);
+    return () => window.removeEventListener("augchatd:open-help", handler);
+  }, []);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Slash commands</DialogTitle>
+          <DialogDescription>
+            Type <code className="rounded bg-muted px-1 py-0.5 font-mono">/</code> in
+            the composer to open the command picker.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mt-2 flex flex-col gap-2">
+          {SLASH_COMMAND_LIST.map((c) => (
+            <div key={c.id} className="flex items-baseline gap-3 text-sm">
+              <code className="font-mono text-primary">{c.id}</code>
+              <span className="text-muted-foreground">{c.description}</span>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -282,6 +388,13 @@ function useAugchatdChatRuntime({
     () => createHistoryAdapter(authedFetch, cidRef),
     [authedFetch],
   );
+
+  // Voice adapters — memoized so the WebSpeech sessions aren't recreated
+  // on every render. WebSpeechDictationAdapter falls back gracefully on
+  // browsers without `window.SpeechRecognition`; the Dictate primitive
+  // turns into a disabled button.
+  const dictation = useMemo(() => new WebSpeechDictationAdapter(), []);
+  const speech = useMemo(() => new WebSpeechSynthesisAdapter(), []);
 
   const transport = useMemo(
     () =>
@@ -331,7 +444,11 @@ function useAugchatdChatRuntime({
     [jwtRef, refreshJwt],
   );
 
-  return useChatRuntime({ transport, adapters: { history } });
+  return useChatRuntime({
+    transport,
+    adapters: { history, dictation, speech },
+    suggestions: STATIC_SUGGESTIONS,
+  });
 }
 
 /**
@@ -351,8 +468,10 @@ function UrlSync() {
 
 function DemoBanner() {
   return (
-    <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
-      Demo session — not authenticated
+    <div className="absolute top-10 left-0 right-1.25 z-10 bg-background">
+      <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
+        Demo session — not authenticated
+      </div>
     </div>
   );
 }
@@ -461,24 +580,36 @@ function applyTheme(theme: "light" | "dark" | undefined): void {
   }
 }
 
-function ChatView({ authedFetch, flushStalled }: { authedFetch: AuthedFetch; flushStalled: boolean }) {
+function ChatView() {
   return (
-    <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
+    <ThreadPrimitive.Root className="relative flex min-h-0 flex-1 flex-col h-full overflow-hidden">
       <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 py-8">
-          <ThreadPrimitive.Empty>
+        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 pt-20 pb-28">
+          <AuiIf condition={(s) => s.thread.isEmpty}>
             <EmptyState />
-          </ThreadPrimitive.Empty>
-          <ThreadPrimitive.Messages
-            components={{ UserMessage, AssistantMessage }}
-          />
+          </AuiIf>
+          <ThreadPrimitive.Messages>
+            {({ message }) =>
+              message.role === "user" ? <UserMessage /> : <AssistantMessage />
+            }
+          </ThreadPrimitive.Messages>
         </div>
       </ThreadPrimitive.Viewport>
-      {flushStalled ? (
-          <FlushStalledBanner />
-        ) : (
-          <Composer authedFetch={authedFetch} />
-        )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ThreadPrimitive.ScrollToBottom asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Scroll to bottom"
+              className="absolute bottom-20 right-4 z-10 rounded-full shadow-md disabled:invisible"
+            >
+              <ChevronDown className="size-4" />
+            </Button>
+          </ThreadPrimitive.ScrollToBottom>
+        </TooltipTrigger>
+        <TooltipContent>Scroll to bottom</TooltipContent>
+      </Tooltip>
     </ThreadPrimitive.Root>
   );
 }
@@ -512,6 +643,13 @@ function FlushStalledBanner() {
 }
 
 function EmptyState() {
+  // Render suggestions manually instead of <ThreadPrimitive.Suggestions> +
+  // <SuggestionPrimitive.Trigger>: in assistant-ui 0.14.x the `suggestions`
+  // option on useChatRuntime populates the legacy runtime-core field but
+  // does NOT flow into the new `s.suggestions` store scope that
+  // ThreadPrimitive.Suggestions reads — so the primitive renders nothing.
+  const aui = useAui();
+  const disabled = useAuiState((s) => s.thread.isDisabled);
   return (
     <Card>
       <CardContent className="p-6">
@@ -520,18 +658,24 @@ function EmptyState() {
           The session uses the model and key bound at boot from env vars.
         </div>
         <div className="flex flex-wrap gap-2">
-          {SUGGESTIONS.map((text) => (
-            <ThreadPrimitive.Suggestion
-              key={text}
-              prompt={text}
-              method="replace"
-              autoSend
-              asChild
+          {STATIC_SUGGESTIONS.map((s) => (
+            <Button
+              key={s.title}
+              variant="secondary"
+              size="sm"
+              className="rounded-full"
+              disabled={disabled}
+              onClick={() => {
+                if (aui.thread().getState().isRunning) return;
+                aui.thread().append({
+                  content: [{ type: "text", text: s.prompt }],
+                  runConfig: aui.composer().getState().runConfig,
+                });
+                aui.composer().setText("");
+              }}
             >
-              <Button variant="secondary" size="sm" className="rounded-full">
-                {text}
-              </Button>
-            </ThreadPrimitive.Suggestion>
+              {s.title}
+            </Button>
           ))}
         </div>
       </CardContent>
@@ -546,7 +690,13 @@ function UserMessage() {
         You
       </div>
       <div className="rounded-2xl rounded-tr-md border bg-muted px-4 py-2.5 max-w-[85%] whitespace-pre-wrap">
-        <MessagePrimitive.Parts components={{ Image: ImagePart }} />
+        <MessagePrimitive.Parts>
+          {({ part }) => {
+            if (part.type === "text") return <>{part.text}</>;
+            if (part.type === "image") return <ImagePart {...part} />;
+            return null;
+          }}
+        </MessagePrimitive.Parts>
       </div>
     </MessagePrimitive.Root>
   );
@@ -562,30 +712,67 @@ function AssistantMessage() {
         <ModelChip />
       </div>
       <div className="rounded-2xl rounded-tl-md border bg-card text-card-foreground px-4 py-3 max-w-[95%]">
-        {/* While the response is still in flight and no content has
-            arrived (no text-delta, no tool-call), the bubble was
-            collapsing to a thin empty rectangle that looked broken.
-            Three pulsing dots fill the gap; they disappear as soon
-            as any part lands. */}
-        <MessagePrimitive.If hasContent={false}>
-          <ThinkingDots />
-        </MessagePrimitive.If>
-        <MessagePrimitive.Parts
-          components={{
-            Text: MarkdownText,
-            Image: ImagePart,
-            Reasoning: ReasoningPart,
-            Source: SourceBlock,
-            tools: { Fallback: ToolCallBlock },
-            ToolGroup,
+        <MessagePrimitive.GroupedParts
+          groupBy={(part) => {
+            if (part.type === "reasoning") return ["group-thought"];
+            if (part.type === "tool-call") return ["group-thought"];
+            return null;
           }}
-        />
+        >
+          {({ part, children }) => {
+            switch (part.type) {
+              case "group-thought": {
+                const running = part.status.type === "running";
+                return (
+                  <ChainOfThoughtBlock running={running}>
+                    {children}
+                  </ChainOfThoughtBlock>
+                );
+              }
+              case "text":
+                return <MarkdownText />;
+              case "image":
+                return <ImagePart {...part} />;
+              case "source":
+                return <SourceBlock {...part} />;
+              case "reasoning":
+                return <Reasoning {...part} />;
+              case "tool-call":
+                return part.toolUI ?? <ToolFallback {...part} />;
+              default:
+                return null;
+            }
+          }}
+        </MessagePrimitive.GroupedParts>
+        {/* "Working…" trail — visible whenever the assistant is running
+            but hasn't started streaming visible text yet. Covers three
+            gaps the streaming caret can't: (a) initial latency before
+            any part arrives, (b) reasoning streaming with no text yet,
+            (c) tool calls in flight before the text follow-up starts.
+            Removed as soon as a `text` part is appended; from there on
+            the Streamdown `caret="block"` ▋ takes over. */}
+        <AuiIf
+          condition={(s) =>
+            s.message.status?.type === "running" &&
+            !s.message.parts.some((p) => p.type === "text")
+          }
+        >
+          <ThinkingDots />
+        </AuiIf>
         <UpstreamAuthListener />
       </div>
       <div className="mt-1 flex items-center gap-1 text-muted-foreground">
         <AssistantActionBar />
         <BranchPicker />
       </div>
+      <SelectionToolbarPrimitive.Root>
+        <SelectionToolbarPrimitive.Quote asChild>
+          <Button variant="secondary" size="sm" className="gap-1.5 shadow-md">
+            <QuoteIcon className="size-3.5" />
+            Quote
+          </Button>
+        </SelectionToolbarPrimitive.Quote>
+      </SelectionToolbarPrimitive.Root>
     </MessagePrimitive.Root>
   );
 }
@@ -601,15 +788,13 @@ function AssistantMessage() {
  * spec/src/behavior/contracts/jwt-refresh.md.
  */
 function UpstreamAuthListener() {
-  const hasUpstreamAuthError = useMessage((s) => {
+  const hasUpstreamAuthError = useAuiState((s) => {
     // assistant-ui normalizes the AI SDK's `data-<name>` parts to
     // `{type: "data", name: "<name>", data: ...}` in the message
-    // content. We watch for `name === "augchatd-error"` once it appears
+    // parts. We watch for `name === "augchatd-error"` once it appears
     // anywhere in the message — the chat backend emits exactly one
     // such part per turn, after the stream settles.
-    const content = (s as { content?: readonly unknown[] }).content;
-    if (!Array.isArray(content)) return false;
-    return content.some(
+    return s.message.parts.some(
       (p) =>
         typeof p === "object" &&
         p !== null &&
@@ -627,18 +812,58 @@ function UpstreamAuthListener() {
 }
 
 /**
+ * "Thinking" collapsible — wraps reasoning + tool-call parts grouped via
+ * `MessagePrimitive.GroupedParts` with `["group-thought"]`. Auto-opens
+ * while the group's status is `running` so the user sees the chain as it
+ * builds; collapses to a compact header once the model moves on.
+ */
+function ChainOfThoughtBlock({
+  running,
+  children,
+}: {
+  running: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Collapsible
+      defaultOpen={false}
+      className="group/cot my-2 rounded-md border bg-muted/30 p-2"
+    >
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto w-full justify-start gap-1.5 px-1 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-transparent"
+        >
+          <Brain
+            className={cn("size-3.5", running && "animate-pulse text-primary")}
+            aria-hidden
+          />
+          <span>{running ? "Thinking…" : "Thought"}</span>
+          <ChevronDown className="ml-auto size-3.5 transition-transform group-data-[state=closed]/cot:-rotate-90" />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="ml-2 mt-2 flex flex-col gap-2 border-l-2 border-muted pl-3">
+        {children}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/**
  * Per-assistant-message provenance chip. Reads the model_id stamped by
  * the chat backend's `messageMetadata` callback (chat.ts) via
- * `useMessage` — surfaces a small "Bot icon + gpt-5-mini" label so a user who
+ * `useAuiState` — surfaces a small "Bot icon + gpt-5-mini" label so a user who
  * switched models mid-conversation can tell which model produced each
  * reply. Renders nothing if the metadata is absent (e.g. messages
  * stored before this column was added).
  */
 function ModelChip() {
-  const modelId = useMessage(
+  const modelId = useAuiState(
     (s) =>
-      (s.metadata?.custom as { augchatd?: { model_id?: string } } | undefined)
-        ?.augchatd?.model_id,
+      (s.message.metadata?.custom as
+        | { augchatd?: { model_id?: string } }
+        | undefined)?.augchatd?.model_id,
   );
   if (!modelId) return null;
   return (
@@ -673,26 +898,6 @@ function ThinkingDots() {
   );
 }
 
-function ReasoningPart({ text }: { text: string }) {
-  if (!text) return null;
-  return (
-    <Collapsible className="my-2 rounded-lg border bg-background p-2 text-muted-foreground">
-      <CollapsibleTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-auto w-full justify-start px-1 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-transparent"
-        >
-          Reasoning
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 whitespace-pre-wrap font-mono text-[0.85em] leading-relaxed">
-        {text}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 function ImagePart({ image }: { image?: string }) {
   if (!image) return null;
   return <img src={image} alt="" className="my-3 max-h-96 max-w-full rounded-lg" />;
@@ -707,8 +912,8 @@ function AssistantActionBar() {
     >
       <ActionBarPrimitive.Copy asChild>
         <Button variant="ghost" size="xs" aria-label="Copy">
-          <MessagePrimitive.If copied>Copied</MessagePrimitive.If>
-          <MessagePrimitive.If copied={false}>Copy</MessagePrimitive.If>
+          <AuiIf condition={(s) => s.message.isCopied}>Copied</AuiIf>
+          <AuiIf condition={(s) => !s.message.isCopied}>Copy</AuiIf>
         </Button>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload asChild>
@@ -716,6 +921,26 @@ function AssistantActionBar() {
           Regenerate
         </Button>
       </ActionBarPrimitive.Reload>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ActionBarPrimitive.Speak asChild>
+            <Button variant="ghost" size="icon-xs" aria-label="Read aloud">
+              <Volume2 className="size-3.5" />
+            </Button>
+          </ActionBarPrimitive.Speak>
+        </TooltipTrigger>
+        <TooltipContent>Read aloud</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ActionBarPrimitive.StopSpeaking asChild>
+            <Button variant="ghost" size="icon-xs" aria-label="Stop speaking">
+              <VolumeX className="size-3.5" />
+            </Button>
+          </ActionBarPrimitive.StopSpeaking>
+        </TooltipTrigger>
+        <TooltipContent>Stop speaking</TooltipContent>
+      </Tooltip>
     </ActionBarPrimitive.Root>
   );
 }
@@ -726,19 +951,29 @@ function BranchPicker() {
       hideWhenSingleBranch
       className="flex items-center gap-1 text-xs"
     >
-      <BranchPickerPrimitive.Previous asChild>
-        <Button variant="ghost" size="icon-xs" aria-label="Previous branch">
-          <ChevronLeft className="size-3.5" />
-        </Button>
-      </BranchPickerPrimitive.Previous>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <BranchPickerPrimitive.Previous asChild>
+            <Button variant="ghost" size="icon-xs" aria-label="Previous branch">
+              <ChevronLeft className="size-3.5" />
+            </Button>
+          </BranchPickerPrimitive.Previous>
+        </TooltipTrigger>
+        <TooltipContent>Previous branch</TooltipContent>
+      </Tooltip>
       <span className="tabular-nums">
         <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
       </span>
-      <BranchPickerPrimitive.Next asChild>
-        <Button variant="ghost" size="icon-xs" aria-label="Next branch">
-          <ChevronRight className="size-3.5" />
-        </Button>
-      </BranchPickerPrimitive.Next>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <BranchPickerPrimitive.Next asChild>
+            <Button variant="ghost" size="icon-xs" aria-label="Next branch">
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </BranchPickerPrimitive.Next>
+        </TooltipTrigger>
+        <TooltipContent>Next branch</TooltipContent>
+      </Tooltip>
     </BranchPickerPrimitive.Root>
   );
 }
@@ -753,9 +988,31 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
   // menus stay hidden so they don't fire PUTs against undefined.
   const conversationId = useAuiState((s) => s.threadListItem.remoteId);
   return (
-    <div className="border-t bg-background">
+    <div className="bg-background absolute left-0 right-1.25 bottom-0">
       <div className="mx-auto w-full max-w-[44rem] px-4 pb-3 pt-3">
-        <ComposerPrimitive.Root className="flex flex-col gap-2 rounded-lg border border-input bg-transparent px-3 py-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+        <ComposerPrimitive.Unstable_TriggerPopoverRoot>
+        <ComposerPrimitive.Root className="relative flex flex-col gap-2 rounded-xl border border-input bg-transparent px-3 py-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+          <AuiIf condition={(s) => s.composer.quote !== undefined}>
+            <div className="flex items-start gap-2 rounded-md border-l-2 border-primary/40 bg-muted/30 p-2 text-sm">
+              <QuoteIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <ComposerPrimitive.QuoteText className="line-clamp-3 flex-1 italic text-muted-foreground" />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ComposerPrimitive.QuoteDismiss asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove quote"
+                      className="-mr-1 size-5"
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  </ComposerPrimitive.QuoteDismiss>
+                </TooltipTrigger>
+                <TooltipContent>Remove quote</TooltipContent>
+              </Tooltip>
+            </div>
+          </AuiIf>
           <ComposerPrimitive.Input asChild>
             <textarea
               placeholder="Send a message…"
@@ -764,6 +1021,12 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
               className="field-sizing-content min-h-6 max-h-50 w-full resize-none bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
             />
           </ComposerPrimitive.Input>
+          <AuiIf condition={(s) => s.composer.dictation !== undefined}>
+            <div className="flex items-center gap-2 rounded-md border-l-2 border-primary/40 bg-muted/30 px-2 py-1 text-sm text-muted-foreground">
+              <Mic className="size-3.5 animate-pulse text-primary" aria-hidden />
+              <ComposerPrimitive.DictationTranscript className="flex-1 italic" />
+            </div>
+          </AuiIf>
           <div className="flex items-center gap-2">
             {conversationId && (
               <>
@@ -771,14 +1034,88 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
                 <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
               </>
             )}
-            <ComposerPrimitive.Send asChild>
-              <Button size="sm" className="ml-auto">
-                Send
-              </Button>
-            </ComposerPrimitive.Send>
+            <AuiIf condition={(s) => s.composer.dictation === undefined}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ComposerPrimitive.Dictate asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Start dictation"
+                      className="size-8"
+                    >
+                      <Mic className="size-4" />
+                    </Button>
+                  </ComposerPrimitive.Dictate>
+                </TooltipTrigger>
+                <TooltipContent>Start dictation</TooltipContent>
+              </Tooltip>
+            </AuiIf>
+            <AuiIf condition={(s) => s.composer.dictation !== undefined}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ComposerPrimitive.StopDictation asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Stop dictation"
+                      className="size-8"
+                    >
+                      <MicOff className="size-4 text-primary" />
+                    </Button>
+                  </ComposerPrimitive.StopDictation>
+                </TooltipTrigger>
+                <TooltipContent>Stop dictation</TooltipContent>
+              </Tooltip>
+            </AuiIf>
+            <AuiIf condition={(s) => !s.thread.isRunning}>
+              <ComposerPrimitive.Send asChild>
+                <Button size="sm" className="ml-auto">
+                  Send
+                </Button>
+              </ComposerPrimitive.Send>
+            </AuiIf>
+            <AuiIf condition={(s) => s.thread.isRunning}>
+              <ComposerPrimitive.Cancel asChild>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="ml-auto"
+                  aria-label="Stop generating"
+                >
+                  Stop
+                </Button>
+              </ComposerPrimitive.Cancel>
+            </AuiIf>
           </div>
+          <SlashCommandTrigger />
         </ComposerPrimitive.Root>
+        </ComposerPrimitive.Unstable_TriggerPopoverRoot>
       </div>
     </div>
+  );
+}
+
+/**
+ * Wraps the `/`-trigger popover. Lives inside `ComposerPrimitive.Root` so
+ * the popover anchors against the textarea. The actual commands fire
+ * window events handled at the `AugchatdRuntime` level.
+ */
+function SlashCommandTrigger() {
+  // `removeOnExecute: true` strips the `/<id>` text from the composer
+  // after the command fires — our commands are imperative actions
+  // (open dropdown, switch thread, show help), not message-level
+  // directives, so an audit-trail chip is misleading.
+  const slash = unstable_useSlashCommandAdapter({
+    commands: SLASH_COMMANDS,
+    removeOnExecute: true,
+  });
+  return (
+    <ComposerTriggerPopover
+      char="/"
+      {...slash}
+      iconMap={{ Plus, Zap, Wrench, HelpCircle }}
+      fallbackIcon={SlashIcon}
+    />
   );
 }

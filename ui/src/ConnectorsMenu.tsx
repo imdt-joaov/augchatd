@@ -30,6 +30,14 @@ export function ConnectorsMenu({
   const [items, setItems] = useState<ConnectorListItem[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Open state — externally controllable via `augchatd:open-connectors`
+  // (fired by the `/connectors` slash command).
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener("augchatd:open-connectors", handler);
+    return () => window.removeEventListener("augchatd:open-connectors", handler);
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -73,9 +81,9 @@ export function ConnectorsMenu({
   const totalCount = items?.length ?? 0;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" aria-label="Toggle connectors">
+        <Button variant="ghost" size="sm" aria-label="Toggle connectors">
           <Wrench className="size-3.5" aria-hidden />
           <span>Tools{items ? ` ${activeCount}/${totalCount}` : ""}</span>
         </Button>

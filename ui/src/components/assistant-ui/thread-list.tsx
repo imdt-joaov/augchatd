@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   AuiIf,
   ThreadListItemMorePrimitive,
@@ -76,16 +77,21 @@ const ThreadListItem: FC = () => {
 const ThreadListItemMore: FC = () => {
   return (
     <ThreadListItemMorePrimitive.Root>
-      <ThreadListItemMorePrimitive.Trigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="aui-thread-list-item-more me-2 size-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:bg-accent data-[state=open]:opacity-100 group-data-active:opacity-100"
-        >
-          <MoreHorizontalIcon className="size-4" />
-          <span className="sr-only">More options</span>
-        </Button>
-      </ThreadListItemMorePrimitive.Trigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <ThreadListItemMorePrimitive.Trigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="aui-thread-list-item-more me-2 size-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:bg-accent data-[state=open]:opacity-100 group-data-active:opacity-100"
+            >
+              <MoreHorizontalIcon className="size-4" />
+              <span className="sr-only">More options</span>
+            </Button>
+          </ThreadListItemMorePrimitive.Trigger>
+        </TooltipTrigger>
+        <TooltipContent>More options</TooltipContent>
+      </Tooltip>
       <ThreadListItemMorePrimitive.Content
         side="bottom"
         align="start"

@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "tw-shimmer";
 @import "shadcn/tailwind.css";
+
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/mermaid/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -48,6 +55,7 @@
 }
 
 :root {
+    color-scheme: light;
     --background: #ffffff;
     --foreground: #213445;
     --card: #ffffff;
@@ -83,6 +91,7 @@
 }
 
 .dark {
+    color-scheme: dark;
     --background: #14171c;
     --foreground: #f4f5f7;
     --card: #232830;
@@ -95,7 +104,7 @@
     --secondary-foreground: #828690;
     --muted: #0f100e;
     --muted-foreground: #6a6a73;
-    --accent: #232830;
+    --accent: #2e353f;
     --accent-foreground: #f4f5f7;
     --destructive: #ff507a;
     --border: rgba(255, 255, 255, 0.08);
@@ -143,7 +152,7 @@
     @apply bg-background text-foreground;
     }
   html {
-    @apply font-sans;
+    @apply font-sans overflow-hidden;
     }
   button {
     @apply cursor-pointer
