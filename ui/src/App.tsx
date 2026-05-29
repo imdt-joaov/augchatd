@@ -275,7 +275,7 @@ function AugchatdRuntime({
       <SidebarProvider defaultOpen className="h-full min-h-0">
         <ThreadListSidebar collapsible="offcanvas" />
         <SidebarInset className="min-h-0">
-          <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-2 absolute top-0 left-0 right-1.25 z-10">
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-2 absolute top-0 left-0 right-2 z-10">
             <Tooltip>
               <TooltipTrigger asChild>
                 <SidebarTrigger className="-ml-1" />
@@ -468,7 +468,7 @@ function UrlSync() {
 
 function DemoBanner() {
   return (
-    <div className="absolute top-10 left-0 right-1.25 z-10 bg-background">
+    <div className="absolute top-10 left-0 right-2 z-10 bg-background">
       <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
         Demo session — not authenticated
       </div>
@@ -584,7 +584,7 @@ function ChatView() {
   return (
     <ThreadPrimitive.Root className="relative flex min-h-0 flex-1 flex-col h-full overflow-hidden">
       <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 pt-20 pb-28">
+        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 pt-24 pb-28">
           <AuiIf condition={(s) => s.thread.isEmpty}>
             <EmptyState />
           </AuiIf>
@@ -988,7 +988,7 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
   // menus stay hidden so they don't fire PUTs against undefined.
   const conversationId = useAuiState((s) => s.threadListItem.remoteId);
   return (
-    <div className="bg-background absolute left-0 right-1.25 bottom-0">
+    <div className="bg-background absolute left-0 right-2 bottom-0">
       <div className="mx-auto w-full max-w-[44rem] px-4 pb-3 pt-3">
         <ComposerPrimitive.Unstable_TriggerPopoverRoot>
         <ComposerPrimitive.Root className="relative flex flex-col gap-2 rounded-xl border border-input bg-transparent px-3 py-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
