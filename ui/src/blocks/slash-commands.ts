@@ -1,4 +1,5 @@
 import type { Unstable_SlashCommand } from "@assistant-ui/react";
+import type { TFunction } from "i18next";
 
 /**
  * Slash commands exposed via `/` in the composer.
@@ -12,48 +13,54 @@ import type { Unstable_SlashCommand } from "@assistant-ui/react";
  * - `/model` → `augchatd:open-model-picker`
  * - `/connectors` → `augchatd:open-connectors`
  * - `/help` → `augchatd:open-help`
+ *
+ * Descriptions are built lazily from `t` so they re-render in the active
+ * locale — see [[contract-ui-i18n]].
  */
-export const SLASH_COMMANDS: readonly Unstable_SlashCommand[] = [
-  {
-    id: "clear",
-    description: "Start a new conversation",
-    icon: "Plus",
-    execute: () => {
-      window.dispatchEvent(new CustomEvent("augchatd:new-thread"));
+export function buildSlashCommands(t: TFunction): readonly Unstable_SlashCommand[] {
+  return [
+    {
+      id: "clear",
+      description: t("slash.clear"),
+      icon: "Plus",
+      execute: () => {
+        window.dispatchEvent(new CustomEvent("augchatd:new-thread"));
+      },
     },
-  },
-  {
-    id: "model",
-    description: "Switch the AI model",
-    icon: "Zap",
-    execute: () => {
-      window.dispatchEvent(new CustomEvent("augchatd:open-model-picker"));
+    {
+      id: "model",
+      description: t("slash.model"),
+      icon: "Zap",
+      execute: () => {
+        window.dispatchEvent(new CustomEvent("augchatd:open-model-picker"));
+      },
     },
-  },
-  {
-    id: "connectors",
-    description: "Toggle connectors",
-    icon: "Wrench",
-    execute: () => {
-      window.dispatchEvent(new CustomEvent("augchatd:open-connectors"));
+    {
+      id: "connectors",
+      description: t("slash.connectors"),
+      icon: "Wrench",
+      execute: () => {
+        window.dispatchEvent(new CustomEvent("augchatd:open-connectors"));
+      },
     },
-  },
-  {
-    id: "help",
-    description: "Show available slash commands",
-    icon: "HelpCircle",
-    execute: () => {
-      window.dispatchEvent(new CustomEvent("augchatd:open-help"));
+    {
+      id: "help",
+      description: t("slash.help"),
+      icon: "HelpCircle",
+      execute: () => {
+        window.dispatchEvent(new CustomEvent("augchatd:open-help"));
+      },
     },
-  },
-];
+  ];
+}
 
-export const SLASH_COMMAND_LIST: ReadonlyArray<{
-  id: string;
-  description: string;
-}> = [
-  { id: "/clear", description: "Start a new conversation" },
-  { id: "/model", description: "Switch the AI model" },
-  { id: "/connectors", description: "Toggle connectors" },
-  { id: "/help", description: "Show this cheatsheet" },
-];
+export function buildSlashCommandList(
+  t: TFunction,
+): ReadonlyArray<{ id: string; description: string }> {
+  return [
+    { id: "/clear", description: t("slash.clear") },
+    { id: "/model", description: t("slash.model") },
+    { id: "/connectors", description: t("slash.connectors") },
+    { id: "/help", description: t("help.cheatsheet") },
+  ];
+}

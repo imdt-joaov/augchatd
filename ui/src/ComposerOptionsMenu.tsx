@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Brain, ChevronDown, Scale, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +42,7 @@ export function ComposerOptionsMenu({
   conversationId: string;
   authedFetch: AuthedFetch;
 }) {
+  const { t } = useTranslation();
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [currentModelId, setCurrentModelId] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
@@ -139,7 +142,7 @@ export function ComposerOptionsMenu({
 
   const currentModel = models?.find((m) => m.id === currentModelId) ?? null;
   const supportsReasoning = currentModel?.supports_reasoning ?? false;
-  const reasoningTooltip = reasoningTooltipFor(currentModelId);
+  const reasoningTooltip = reasoningTooltipFor(currentModelId, t);
 
   // Sort defensively by `created_at` desc — ISO 8601 strings sort
   // lexicographically. Surface only the 3 newest in the main list;
@@ -175,10 +178,10 @@ export function ComposerOptionsMenu({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Composer options">
+        <Button variant="ghost" size="sm" aria-label={t("composer.options")}>
           <Zap className="size-3.5" aria-hidden />
           <span className="max-w-[160px] truncate">
-            {currentModel?.display_name ?? currentModelId ?? "Model…"}
+            {currentModel?.display_name ?? currentModelId ?? t("composer.modelFallback")}
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden />
         </Button>
@@ -188,18 +191,20 @@ export function ComposerOptionsMenu({
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Scale className="mr-2 size-4" aria-hidden />
-            <span>Advanced</span>
+            <span>{t("composer.advanced")}</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-72 max-h-80 overflow-y-auto">
             <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Model (this conversation){provider ? ` · ${provider}` : ""}
+              {provider
+                ? t("composer.modelForConversationWithProvider", { provider })
+                : t("composer.modelForConversation")}
             </DropdownMenuLabel>
             {!models && !error && (
-              <div className="px-2 py-2 text-[13px] text-muted-foreground">Loading…</div>
+              <div className="px-2 py-2 text-[13px] text-muted-foreground">{t("loading")}</div>
             )}
             {models && models.length === 0 && (
               <div className="px-2 py-2 text-[13px] text-muted-foreground">
-                No models returned.
+                {t("composer.noModels")}
               </div>
             )}
             {topModels.map(renderModelItem)}
@@ -207,7 +212,7 @@ export function ComposerOptionsMenu({
             {restModels.length > 0 && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
-                  <span>More models</span>
+                  <span>{t("composer.moreModels")}</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-72 max-h-80 overflow-y-auto">
                   {restModels.map(renderModelItem)}
@@ -219,7 +224,7 @@ export function ComposerOptionsMenu({
 
         {supportsReasoning && reasoningEnabled !== null && (
           <DropdownMenuItem
-            title={error ? `Error: ${error}` : reasoningTooltip}
+            title={error ? t("composer.errorPrefix", { message: error }) : reasoningTooltip}
             onSelect={(e) => {
               e.preventDefault();
               void flipReasoning();
@@ -228,16 +233,18 @@ export function ComposerOptionsMenu({
           >
             <span className="flex items-center gap-2">
               <Brain className="size-4" aria-hidden />
-              <span>Reasoning</span>
+              <span>{t("composer.reasoning")}</span>
             </span>
-            <Switch checked={reasoningEnabled} aria-label="Toggle reasoning" />
+            <Switch checked={reasoningEnabled} aria-label={t("composer.toggleReasoning")} />
           </DropdownMenuItem>
         )}
 
         {error && (
           <>
             <DropdownMenuSeparator />
-            <div className="px-2 py-1 text-[12px] text-destructive">Error: {error}</div>
+            <div className="px-2 py-1 text-[12px] text-destructive">
+              {t("composer.errorPrefix", { message: error })}
+            </div>
           </>
         )}
       </DropdownMenuContent>
@@ -245,13 +252,9 @@ export function ComposerOptionsMenu({
   );
 }
 
-function reasoningTooltipFor(modelId: string | null): string {
+function reasoningTooltipFor(modelId: string | null, t: TFunction): string {
   if (modelId && /^(o[1-9]|gpt-5)/.test(modelId)) {
-    return (
-      "Toggle whether the model's reasoning summary is streamed and shown. " +
-      "Note: gpt-5 / o-series models always reason internally; turning this off " +
-      "only hides the summary and does NOT reduce reasoning_tokens cost."
-    );
+    return t("composer.reasoningTooltipReasoningSeries");
   }
-  return "Toggle whether the model's extended-thinking output is streamed and shown.";
+  return t("composer.reasoningTooltipExtended");
 }

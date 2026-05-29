@@ -1,0 +1,96 @@
+{
+  "loading": "Chargement…",
+  "augchatd": {
+    "iframeOnlyDemo": "augchatd : cette interface s'exécute dans une iframe — ouvrez /demo/ au lieu de /.",
+    "iframeOnlyProd": "augchatd : cette interface doit être intégrée par une page d'intégrateur (échange postMessage requis).",
+    "errorPrefix": "augchatd : {{message}}"
+  },
+  "demoBanner": "Session de démonstration — non authentifiée",
+  "flushStalled": {
+    "title": "Service temporairement en lecture seule — vos messages sont préservés.",
+    "body": "L'écriture vers le stockage froid échoue ; les nouveaux tours sont en pause jusqu'à ce que la durabilité soit rétablie. La discussion reprend automatiquement dès que l'écriture aboutit."
+  },
+  "thread": {
+    "you": "Vous",
+    "assistant": "Assistant",
+    "scrollToBottom": "Faire défiler vers le bas",
+    "toggleSidebar": "Basculer la barre latérale",
+    "thinking": "Réflexion…",
+    "thought": "Réflexion",
+    "thinkingAria": "réflexion en cours",
+    "generatedBy": "Généré par {{modelId}}",
+    "quote": "Citer",
+    "removeQuote": "Retirer la citation"
+  },
+  "emptyState": {
+    "tryAQuestion": "Essayez une question.",
+    "sessionUsesBoundModel": "La session utilise le modèle et la clé définis au démarrage via les variables d'environnement."
+  },
+  "actionBar": {
+    "copy": "Copier",
+    "copied": "Copié",
+    "regenerate": "Régénérer",
+    "readAloud": "Lire à voix haute",
+    "stopSpeaking": "Arrêter la lecture",
+    "previousBranch": "Branche précédente",
+    "nextBranch": "Branche suivante"
+  },
+  "composer": {
+    "placeholder": "Envoyer un message…",
+    "send": "Envoyer",
+    "stop": "Arrêter",
+    "stopGenerating": "Arrêter la génération",
+    "startDictation": "Démarrer la dictée",
+    "stopDictation": "Arrêter la dictée",
+    "options": "Options du compositeur",
+    "modelFallback": "Modèle…",
+    "advanced": "Avancé",
+    "modelForConversation": "Modèle (cette conversation)",
+    "modelForConversationWithProvider": "Modèle (cette conversation) · {{provider}}",
+    "noModels": "Aucun modèle disponible.",
+    "moreModels": "Autres modèles",
+    "reasoning": "Raisonnement",
+    "toggleReasoning": "Basculer le raisonnement",
+    "reasoningTooltipReasoningSeries": "Choisir si le résumé du raisonnement du modèle est diffusé et affiché. Remarque : les modèles gpt-5 / série o raisonnent toujours en interne ; désactiver cette option masque seulement le résumé et ne réduit PAS le coût en reasoning_tokens.",
+    "reasoningTooltipExtended": "Choisir si la réflexion étendue du modèle est diffusée et affichée.",
+    "errorPrefix": "Erreur : {{message}}"
+  },
+  "connectors": {
+    "toggle": "Basculer les connecteurs",
+    "toolsLabel": "Outils",
+    "toolsCount": "Outils {{active}}/{{total}}",
+    "forConversation": "Connecteurs (cette conversation)",
+    "noneInScope": "Aucun connecteur disponible.",
+    "toggleConnector": "Basculer {{name}}",
+    "errorPrefix": "Erreur : {{message}}"
+  },
+  "tool": {
+    "used": "Outil utilisé",
+    "cancelled": "Outil annulé",
+    "resultHeader": "Résultat :",
+    "errorHeader": "Erreur :",
+    "cancelledReasonHeader": "Raison de l'annulation :"
+  },
+  "reasoning": {
+    "label": "Raisonnement",
+    "labelWithDuration": "Raisonnement ({{seconds}}s)"
+  },
+  "threadList": {
+    "newThread": "Nouvelle conversation",
+    "loadingThreads": "Chargement des conversations",
+    "newChatFallback": "Nouvelle discussion",
+    "moreOptions": "Plus d'options",
+    "delete": "Supprimer"
+  },
+  "help": {
+    "title": "Commandes slash",
+    "description": "Tapez <0>/</0> dans le compositeur pour ouvrir le sélecteur de commandes.",
+    "cheatsheet": "Afficher cet aide-mémoire"
+  },
+  "slash": {
+    "clear": "Démarrer une nouvelle conversation",
+    "model": "Changer le modèle d'IA",
+    "connectors": "Basculer les connecteurs",
+    "help": "Afficher les commandes slash disponibles"
+  }
+}

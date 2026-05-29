@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Bot,
   Brain,
@@ -41,7 +42,7 @@ import { MarkdownText } from "./Markdown.tsx";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { Reasoning } from "@/components/assistant-ui/reasoning";
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
-import { SLASH_COMMANDS, SLASH_COMMAND_LIST } from "./blocks/slash-commands";
+import { buildSlashCommands, buildSlashCommandList } from "./blocks/slash-commands";
 import { SourceBlock } from "./blocks/SourceBlock.tsx";
 import { ConnectorsMenu } from "./ConnectorsMenu.tsx";
 import { ComposerOptionsMenu } from "./ComposerOptionsMenu.tsx";
@@ -126,6 +127,7 @@ const STATIC_SUGGESTIONS = [
  * synchronized with the active thread's remoteId.
  */
 export default function App() {
+  const { t } = useTranslation();
   const [health, setHealth] = useState<HealthState | null>(null);
   const [jwtReady, setJwtReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,8 +165,8 @@ export default function App() {
         if (window.parent === window) {
           setError(
             h.mode === "demo"
-              ? "augchatd: this UI runs inside an iframe — open /demo/ instead of /."
-              : "augchatd: this UI must be embedded by an integrator page (postMessage handshake required).",
+              ? t("augchatd.iframeOnlyDemo")
+              : t("augchatd.iframeOnlyProd"),
           );
           return;
         }
@@ -210,14 +212,14 @@ export default function App() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-destructive">
-        augchatd: {error}
+        {t("augchatd.errorPrefix", { message: error })}
       </div>
     );
   }
   if (!health || !jwtReady) {
     return (
       <div className="flex h-full items-center justify-center p-6 text-muted-foreground">
-        Loading…
+        {t("loading")}
       </div>
     );
   }
@@ -303,24 +305,30 @@ function SlashCommandHandlers() {
 }
 
 function HelpDialog() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const handler = () => setOpen(true);
     window.addEventListener("augchatd:open-help", handler);
     return () => window.removeEventListener("augchatd:open-help", handler);
   }, []);
+  const commandList = useMemo(() => buildSlashCommandList(t), [t]);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Slash commands</DialogTitle>
+          <DialogTitle>{t("help.title")}</DialogTitle>
           <DialogDescription>
-            Type <code className="rounded bg-muted px-1 py-0.5 font-mono">/</code> in
-            the composer to open the command picker.
+            <Trans
+              i18nKey="help.description"
+              components={[
+                <code className="rounded bg-muted px-1 py-0.5 font-mono" />,
+              ]}
+            />
           </DialogDescription>
         </DialogHeader>
         <div className="mt-2 flex flex-col gap-2">
-          {SLASH_COMMAND_LIST.map((c) => (
+          {commandList.map((c) => (
             <div key={c.id} className="flex items-baseline gap-3 text-sm">
               <code className="font-mono text-primary">{c.id}</code>
               <span className="text-muted-foreground">{c.description}</span>
@@ -453,10 +461,11 @@ function UrlSync() {
 }
 
 function DemoBanner() {
+  const { t } = useTranslation();
   return (
     <div className="bg-background">
       <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
-        Demo session — not authenticated
+        {t("demoBanner")}
       </div>
     </div>
   );
@@ -567,6 +576,7 @@ function applyTheme(theme: "light" | "dark" | undefined): void {
 }
 
 function ChatView({ health, flushStalled, authedFetch }: { health: HealthState; flushStalled: boolean; authedFetch: AuthedFetch }) {
+  const { t } = useTranslation();
   return (
     <ThreadPrimitive.Root className="relative flex min-h-0 flex-1 flex-col h-full overflow-hidden">
       <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto w-full flex flex-col">
@@ -576,7 +586,7 @@ function ChatView({ health, flushStalled, authedFetch }: { health: HealthState; 
               <TooltipTrigger asChild>
                 <SidebarTrigger className="-ml-1" />
               </TooltipTrigger>
-              <TooltipContent>Toggle sidebar</TooltipContent>
+              <TooltipContent>{t("thread.toggleSidebar")}</TooltipContent>
             </Tooltip>
           </header>
           {health.mode === "demo" && <DemoBanner />}
@@ -603,14 +613,14 @@ function ChatView({ health, flushStalled, authedFetch }: { health: HealthState; 
             <Button
               variant="outline"
               size="icon"
-              aria-label="Scroll to bottom"
+              aria-label={t("thread.scrollToBottom")}
               className="absolute bottom-20 right-4 z-10 rounded-full shadow-md disabled:invisible"
             >
               <ChevronDown className="size-4" />
             </Button>
           </ThreadPrimitive.ScrollToBottom>
         </TooltipTrigger>
-        <TooltipContent>Scroll to bottom</TooltipContent>
+        <TooltipContent>{t("thread.scrollToBottom")}</TooltipContent>
       </Tooltip>
     </ThreadPrimitive.Root>
   );
@@ -625,19 +635,14 @@ function ChatView({ health, flushStalled, authedFetch }: { health: HealthState; 
  * background retry chain landed a successful flush).
  */
 function FlushStalledBanner() {
+  const { t } = useTranslation();
   return (
     <div className="border-t border-warn-border bg-warn-bg">
       <div className="mx-auto flex w-full max-w-thread items-start gap-3 px-4 py-3 text-warn-fg">
         <span aria-hidden className="text-lg leading-none">⚠</span>
         <div className="flex-1 text-sm">
-          <div className="font-semibold">
-            Service temporarily read-only — your messages are preserved.
-          </div>
-          <div className="mt-1 text-xs opacity-90">
-            Cold-storage flush is failing; new turns are paused until durability
-            is restored. The chat resumes automatically on the next successful
-            flush.
-          </div>
+          <div className="font-semibold">{t("flushStalled.title")}</div>
+          <div className="mt-1 text-xs opacity-90">{t("flushStalled.body")}</div>
         </div>
       </div>
     </div>
@@ -650,14 +655,15 @@ function EmptyState() {
   // option on useChatRuntime populates the legacy runtime-core field but
   // does NOT flow into the new `s.suggestions` store scope that
   // ThreadPrimitive.Suggestions reads — so the primitive renders nothing.
+  const { t } = useTranslation();
   const aui = useAui();
   const disabled = useAuiState((s) => s.thread.isDisabled);
   return (
     <Card>
       <CardContent className="p-6">
-        <div className="mb-1 text-foreground">Try a question.</div>
+        <div className="mb-1 text-foreground">{t("emptyState.tryAQuestion")}</div>
         <div className="mb-4 text-[13px] text-muted-foreground">
-          The session uses the model and key bound at boot from env vars.
+          {t("emptyState.sessionUsesBoundModel")}
         </div>
         <div className="flex flex-wrap gap-2">
           {STATIC_SUGGESTIONS.map((s) => (
@@ -686,10 +692,11 @@ function EmptyState() {
 }
 
 function UserMessage() {
+  const { t } = useTranslation();
   return (
     <MessagePrimitive.Root className="flex flex-col items-end gap-1">
       <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        You
+        {t("thread.you")}
       </div>
       <div className="rounded-2xl rounded-tr-md border bg-muted px-4 py-2.5 max-w-[85%] whitespace-pre-wrap">
         <MessagePrimitive.Quote>
@@ -718,11 +725,12 @@ function UserMessage() {
 }
 
 function AssistantMessage() {
+  const { t } = useTranslation();
   return (
     <MessagePrimitive.Root className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Assistant
+          {t("thread.assistant")}
         </span>
         <ModelChip />
       </div>
@@ -784,7 +792,7 @@ function AssistantMessage() {
         <SelectionToolbarPrimitive.Quote asChild>
           <Button variant="secondary" size="sm" className="gap-1.5 shadow-md">
             <QuoteIcon className="size-3.5" />
-            Quote
+            {t("thread.quote")}
           </Button>
         </SelectionToolbarPrimitive.Quote>
       </SelectionToolbarPrimitive.Root>
@@ -839,6 +847,7 @@ function ChainOfThoughtBlock({
   running: boolean;
   children: React.ReactNode;
 }) {
+  const { t } = useTranslation();
   return (
     <Collapsible
       defaultOpen={false}
@@ -854,7 +863,7 @@ function ChainOfThoughtBlock({
             className={cn("size-3.5", running && "animate-pulse text-primary")}
             aria-hidden
           />
-          <span>{running ? "Thinking…" : "Thought"}</span>
+          <span>{running ? t("thread.thinking") : t("thread.thought")}</span>
           <ChevronDown className="ml-auto size-3.5 transition-transform group-data-[state=closed]/cot:-rotate-90" />
         </Button>
       </CollapsibleTrigger>
@@ -874,6 +883,7 @@ function ChainOfThoughtBlock({
  * stored before this column was added).
  */
 function ModelChip() {
+  const { t } = useTranslation();
   const modelId = useAuiState(
     (s) =>
       (s.message.metadata?.custom as
@@ -889,14 +899,15 @@ function ModelChip() {
           <span className="font-mono">{modelId}</span>
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>Generated by {modelId}</TooltipContent>
+      <TooltipContent>{t("thread.generatedBy", { modelId })}</TooltipContent>
     </Tooltip>
   );
 }
 
 function ThinkingDots() {
+  const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-1 py-0.5" aria-label="thinking">
+    <div className="flex items-center gap-1 py-0.5" aria-label={t("thread.thinkingAria")}>
       <span
         className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground"
         style={{ animationDelay: "0ms" }}
@@ -919,6 +930,7 @@ function ImagePart({ image }: { image?: string }) {
 }
 
 function AssistantActionBar() {
+  const { t } = useTranslation();
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
@@ -926,41 +938,42 @@ function AssistantActionBar() {
       className="flex items-center gap-0.5"
     >
       <ActionBarPrimitive.Copy asChild>
-        <Button variant="ghost" size="xs" aria-label="Copy">
-          <AuiIf condition={(s) => s.message.isCopied}>Copied</AuiIf>
-          <AuiIf condition={(s) => !s.message.isCopied}>Copy</AuiIf>
+        <Button variant="ghost" size="xs" aria-label={t("actionBar.copy")}>
+          <AuiIf condition={(s) => s.message.isCopied}>{t("actionBar.copied")}</AuiIf>
+          <AuiIf condition={(s) => !s.message.isCopied}>{t("actionBar.copy")}</AuiIf>
         </Button>
       </ActionBarPrimitive.Copy>
       <ActionBarPrimitive.Reload asChild>
-        <Button variant="ghost" size="xs" aria-label="Regenerate">
-          Regenerate
+        <Button variant="ghost" size="xs" aria-label={t("actionBar.regenerate")}>
+          {t("actionBar.regenerate")}
         </Button>
       </ActionBarPrimitive.Reload>
       <Tooltip>
         <TooltipTrigger asChild>
           <ActionBarPrimitive.Speak asChild>
-            <Button variant="ghost" size="icon-xs" aria-label="Read aloud">
+            <Button variant="ghost" size="icon-xs" aria-label={t("actionBar.readAloud")}>
               <Volume2 className="size-3.5" />
             </Button>
           </ActionBarPrimitive.Speak>
         </TooltipTrigger>
-        <TooltipContent>Read aloud</TooltipContent>
+        <TooltipContent>{t("actionBar.readAloud")}</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
           <ActionBarPrimitive.StopSpeaking asChild>
-            <Button variant="ghost" size="icon-xs" aria-label="Stop speaking">
+            <Button variant="ghost" size="icon-xs" aria-label={t("actionBar.stopSpeaking")}>
               <VolumeX className="size-3.5" />
             </Button>
           </ActionBarPrimitive.StopSpeaking>
         </TooltipTrigger>
-        <TooltipContent>Stop speaking</TooltipContent>
+        <TooltipContent>{t("actionBar.stopSpeaking")}</TooltipContent>
       </Tooltip>
     </ActionBarPrimitive.Root>
   );
 }
 
 function BranchPicker() {
+  const { t } = useTranslation();
   return (
     <BranchPickerPrimitive.Root
       hideWhenSingleBranch
@@ -969,12 +982,12 @@ function BranchPicker() {
       <Tooltip>
         <TooltipTrigger asChild>
           <BranchPickerPrimitive.Previous asChild>
-            <Button variant="ghost" size="icon-xs" aria-label="Previous branch">
+            <Button variant="ghost" size="icon-xs" aria-label={t("actionBar.previousBranch")}>
               <ChevronLeft className="size-3.5" />
             </Button>
           </BranchPickerPrimitive.Previous>
         </TooltipTrigger>
-        <TooltipContent>Previous branch</TooltipContent>
+        <TooltipContent>{t("actionBar.previousBranch")}</TooltipContent>
       </Tooltip>
       <span className="tabular-nums">
         <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
@@ -982,12 +995,12 @@ function BranchPicker() {
       <Tooltip>
         <TooltipTrigger asChild>
           <BranchPickerPrimitive.Next asChild>
-            <Button variant="ghost" size="icon-xs" aria-label="Next branch">
+            <Button variant="ghost" size="icon-xs" aria-label={t("actionBar.nextBranch")}>
               <ChevronRight className="size-3.5" />
             </Button>
           </BranchPickerPrimitive.Next>
         </TooltipTrigger>
-        <TooltipContent>Next branch</TooltipContent>
+        <TooltipContent>{t("actionBar.nextBranch")}</TooltipContent>
       </Tooltip>
     </BranchPickerPrimitive.Root>
   );
@@ -1001,6 +1014,7 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
   // While remoteId is still resolving (rare — eager initialize in
   // useAugchatdChatRuntime makes this ~1 tick), the per-conversation
   // menus stay hidden so they don't fire PUTs against undefined.
+  const { t } = useTranslation();
   const conversationId = useAuiState((s) => s.threadListItem.remoteId);
   return (
     <div className="bg-background sticky bottom-0">
@@ -1017,20 +1031,20 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Remove quote"
+                        aria-label={t("thread.removeQuote")}
                         className="-mr-1 size-5"
                       >
                         <X className="size-3" />
                       </Button>
                     </ComposerPrimitive.QuoteDismiss>
                   </TooltipTrigger>
-                  <TooltipContent>Remove quote</TooltipContent>
+                  <TooltipContent>{t("thread.removeQuote")}</TooltipContent>
                 </Tooltip>
               </div>
             </AuiIf>
             <ComposerPrimitive.Input asChild>
               <textarea
-                placeholder="Send a message…"
+                placeholder={t("composer.placeholder")}
                 autoFocus
                 rows={1}
                 className="field-sizing-content min-h-6 max-h-50 w-full resize-none bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
@@ -1056,14 +1070,14 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Start dictation"
+                        aria-label={t("composer.startDictation")}
                         className="size-8"
                       >
                         <Mic className="size-4" />
                       </Button>
                     </ComposerPrimitive.Dictate>
                   </TooltipTrigger>
-                  <TooltipContent>Start dictation</TooltipContent>
+                  <TooltipContent>{t("composer.startDictation")}</TooltipContent>
                 </Tooltip>
               </AuiIf>
               <AuiIf condition={(s) => s.composer.dictation !== undefined}>
@@ -1073,20 +1087,20 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Stop dictation"
+                        aria-label={t("composer.stopDictation")}
                         className="size-8"
                       >
                         <MicOff className="size-4 text-primary" />
                       </Button>
                     </ComposerPrimitive.StopDictation>
                   </TooltipTrigger>
-                  <TooltipContent>Stop dictation</TooltipContent>
+                  <TooltipContent>{t("composer.stopDictation")}</TooltipContent>
                 </Tooltip>
               </AuiIf>
               <AuiIf condition={(s) => !s.thread.isRunning}>
                 <ComposerPrimitive.Send asChild>
                   <Button size="sm" className="ml-auto">
-                    Send
+                    {t("composer.send")}
                   </Button>
                 </ComposerPrimitive.Send>
               </AuiIf>
@@ -1096,9 +1110,9 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
                     size="sm"
                     variant="secondary"
                     className="ml-auto"
-                    aria-label="Stop generating"
+                    aria-label={t("composer.stopGenerating")}
                   >
-                    Stop
+                    {t("composer.stop")}
                   </Button>
                 </ComposerPrimitive.Cancel>
               </AuiIf>
@@ -1121,8 +1135,10 @@ function SlashCommandTrigger() {
   // after the command fires — our commands are imperative actions
   // (open dropdown, switch thread, show help), not message-level
   // directives, so an audit-trail chip is misleading.
+  const { t } = useTranslation();
+  const commands = useMemo(() => buildSlashCommands(t), [t]);
   const slash = unstable_useSlashCommandAdapter({
-    commands: SLASH_COMMANDS,
+    commands,
     removeOnExecute: true,
   });
   return (

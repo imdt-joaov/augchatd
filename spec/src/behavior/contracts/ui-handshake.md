@@ -43,6 +43,7 @@ The same handshake runs in both:
 - The JWT is never put in the iframe URL, in cookies, or in a query string.
 - `augchatd:route` posts from the iframe land at the parent and (in the demo wrapper) update the parent's URL pathname; a subsequent hard reload of the parent URL seeds the iframe at the same route.
 - A `401` from any chat-time endpoint causes the iframe to re-emit `augchatd:ready`; the parent's reply with a fresh JWT lets the chat continue.
+- Iframe-`src` query params are the integrator's other channel into the UI session. `?parent_origin=<origin>` controls postMessage origin checking (above); `?locale=<bcp47>` selects the UI chrome language — see [contract-ui-i18n](ui-i18n.md). Both are set on `src` by the integrator, distinct from the `augchatd:jwt` postMessage payload.
 
 ## Non-promises
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ export function ConnectorsMenu({
   conversationId: string;
   authedFetch: AuthedFetch;
 }) {
+  const { t } = useTranslation();
   const [items, setItems] = useState<ConnectorListItem[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,27 +85,33 @@ export function ConnectorsMenu({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Toggle connectors">
+        <Button variant="ghost" size="sm" aria-label={t("connectors.toggle")}>
           <Wrench className="size-3.5" aria-hidden />
-          <span>Tools{items ? ` ${activeCount}/${totalCount}` : ""}</span>
+          <span>
+            {items
+              ? t("connectors.toolsCount", { active: activeCount, total: totalCount })
+              : t("connectors.toolsLabel")}
+          </span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" side="top" className="w-80">
         <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Connectors (this conversation)
+          {t("connectors.forConversation")}
         </DropdownMenuLabel>
         {error && (
           <>
             <DropdownMenuSeparator />
-            <div className="px-2 py-1 text-[12px] text-destructive">Error: {error}</div>
+            <div className="px-2 py-1 text-[12px] text-destructive">
+              {t("connectors.errorPrefix", { message: error })}
+            </div>
           </>
         )}
         {!items && !error && (
-          <div className="px-2 py-2 text-[13px] text-muted-foreground">Loading…</div>
+          <div className="px-2 py-2 text-[13px] text-muted-foreground">{t("loading")}</div>
         )}
         {items && items.length === 0 && (
           <div className="px-2 py-2 text-[13px] text-muted-foreground">
-            No connectors in scope.
+            {t("connectors.noneInScope")}
           </div>
         )}
         {items?.map((c) => (
@@ -124,7 +132,7 @@ export function ConnectorsMenu({
             </div>
             <Switch
               checked={c.active}
-              aria-label={`Toggle ${c.name}`}
+              aria-label={t("connectors.toggleConnector", { name: c.name })}
               tabIndex={-1}
               className="pointer-events-none mt-0.5"
             />

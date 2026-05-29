@@ -5,6 +5,7 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
 import "@fontsource/open-sans/400.css";
+import "@/lib/i18n";
 import App from "./App.tsx";
 import "./index.css";
 

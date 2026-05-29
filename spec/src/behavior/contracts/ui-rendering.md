@@ -50,6 +50,7 @@ Per-thread UI surfaces (not per-message):
 - **No inline-execution sandboxes** — fenced `python` / `js` / etc. is highlighted, not run. No Pyodide, no WebContainers.
 - **No voice / audio playback** of assistant output.
 - **No runtime theme switching** — the theme is fixed for the session at first handshake (per [contract-ui-handshake](ui-handshake.md)). A new session can choose a different theme; mid-session toggling is not exposed.
+- **No translation of message content** — assistant text, model output, connector names, model display names, thread titles, RAG source snippets, and backend error strings are rendered as-is regardless of the UI locale. Locale applies to chrome only — see [contract-ui-i18n](ui-i18n.md).
 
 ## User messages
 
