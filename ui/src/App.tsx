@@ -275,21 +275,7 @@ function AugchatdRuntime({
       <SidebarProvider defaultOpen className="h-full min-h-0">
         <ThreadListSidebar collapsible="offcanvas" />
         <SidebarInset className="min-h-0">
-          <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-2 absolute top-0 left-0 right-2 z-10">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <SidebarTrigger className="-ml-1" />
-              </TooltipTrigger>
-              <TooltipContent>Toggle sidebar</TooltipContent>
-            </Tooltip>
-          </header>
-          {health.mode === "demo" && <DemoBanner />}
-          <ChatView />
-          {flushStalled ? (
-            <FlushStalledBanner />
-          ) : (
-            <Composer authedFetch={authedFetch} />
-          )}
+          <ChatView health={health} authedFetch={authedFetch} flushStalled={flushStalled} />
         </SidebarInset>
       </SidebarProvider>
     </AssistantRuntimeProvider>
@@ -468,7 +454,7 @@ function UrlSync() {
 
 function DemoBanner() {
   return (
-    <div className="absolute top-10 left-0 right-2 z-10 bg-background">
+    <div className="bg-background">
       <div className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-center text-[13px] font-medium tracking-wide text-destructive">
         Demo session — not authenticated
       </div>
@@ -511,7 +497,7 @@ function resolveParentOrigin(): string {
     } catch {
       console.warn(
         `augchatd: ?parent_origin=${JSON.stringify(fromQuery)} is not a valid URL; ` +
-          `falling back to document.referrer. Postmessage handshake will be permissive.`,
+        `falling back to document.referrer. Postmessage handshake will be permissive.`,
       );
     }
   }
@@ -521,7 +507,7 @@ function resolveParentOrigin(): string {
       const origin = new URL(ref).origin;
       console.warn(
         `augchatd: ?parent_origin= missing on iframe URL; using document.referrer (${origin}). ` +
-          `For strict origin checking, embed with src="…?parent_origin=<parent-origin>".`,
+        `For strict origin checking, embed with src="…?parent_origin=<parent-origin>".`,
       );
       return origin;
     } catch {
@@ -580,11 +566,22 @@ function applyTheme(theme: "light" | "dark" | undefined): void {
   }
 }
 
-function ChatView() {
+function ChatView({ health, flushStalled, authedFetch }: { health: HealthState; flushStalled: boolean; authedFetch: AuthedFetch }) {
   return (
     <ThreadPrimitive.Root className="relative flex min-h-0 flex-1 flex-col h-full overflow-hidden">
-      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 px-4 pt-24 pb-28">
+      <ThreadPrimitive.Viewport className="flex-1 overflow-y-auto w-full flex flex-col">
+        <div className="sticky top-0 z-50">
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <SidebarTrigger className="-ml-1" />
+              </TooltipTrigger>
+              <TooltipContent>Toggle sidebar</TooltipContent>
+            </Tooltip>
+          </header>
+          {health.mode === "demo" && <DemoBanner />}
+        </div>
+        <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6 p-4 flex-1">
           <AuiIf condition={(s) => s.thread.isEmpty}>
             <EmptyState />
           </AuiIf>
@@ -594,6 +591,11 @@ function ChatView() {
             }
           </ThreadPrimitive.Messages>
         </div>
+        {flushStalled ? (
+          <FlushStalledBanner />
+        ) : (
+          <Composer authedFetch={authedFetch} />
+        )}
       </ThreadPrimitive.Viewport>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1001,108 +1003,108 @@ function Composer({ authedFetch }: { authedFetch: AuthedFetch }) {
   // menus stay hidden so they don't fire PUTs against undefined.
   const conversationId = useAuiState((s) => s.threadListItem.remoteId);
   return (
-    <div className="bg-background absolute left-0 right-2 bottom-0">
+    <div className="bg-background sticky bottom-0">
       <div className="mx-auto w-full max-w-[44rem] px-4 pb-3 pt-3">
         <ComposerPrimitive.Unstable_TriggerPopoverRoot>
-        <ComposerPrimitive.Root className="relative flex flex-col gap-2 rounded-xl border border-input bg-transparent px-3 py-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
-          <AuiIf condition={(s) => s.composer.quote !== undefined}>
-            <div className="flex items-start gap-2 rounded-md border-l-2 border-primary/40 bg-muted/30 p-2 text-sm">
-              <QuoteIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              <ComposerPrimitive.QuoteText className="line-clamp-3 flex-1 italic text-muted-foreground" />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ComposerPrimitive.QuoteDismiss asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Remove quote"
-                      className="-mr-1 size-5"
-                    >
-                      <X className="size-3" />
-                    </Button>
-                  </ComposerPrimitive.QuoteDismiss>
-                </TooltipTrigger>
-                <TooltipContent>Remove quote</TooltipContent>
-              </Tooltip>
-            </div>
-          </AuiIf>
-          <ComposerPrimitive.Input asChild>
-            <textarea
-              placeholder="Send a message…"
-              autoFocus
-              rows={1}
-              className="field-sizing-content min-h-6 max-h-50 w-full resize-none bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
-            />
-          </ComposerPrimitive.Input>
-          <AuiIf condition={(s) => s.composer.dictation !== undefined}>
-            <div className="flex items-center gap-2 rounded-md border-l-2 border-primary/40 bg-muted/30 px-2 py-1 text-sm text-muted-foreground">
-              <Mic className="size-3.5 animate-pulse text-primary" aria-hidden />
-              <ComposerPrimitive.DictationTranscript className="flex-1 italic" />
-            </div>
-          </AuiIf>
-          <div className="flex items-center gap-2">
-            {conversationId && (
-              <>
-                <ComposerOptionsMenu conversationId={conversationId} authedFetch={authedFetch} />
-                <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
-              </>
-            )}
-            <AuiIf condition={(s) => s.composer.dictation === undefined}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ComposerPrimitive.Dictate asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Start dictation"
-                      className="size-8"
-                    >
-                      <Mic className="size-4" />
-                    </Button>
-                  </ComposerPrimitive.Dictate>
-                </TooltipTrigger>
-                <TooltipContent>Start dictation</TooltipContent>
-              </Tooltip>
+          <ComposerPrimitive.Root className="relative flex flex-col gap-2 rounded-xl border border-input bg-transparent px-3 py-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30">
+            <AuiIf condition={(s) => s.composer.quote !== undefined}>
+              <div className="flex items-start gap-2 rounded-md border-l-2 border-primary/40 bg-muted/30 p-2 text-sm">
+                <QuoteIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <ComposerPrimitive.QuoteText className="line-clamp-3 flex-1 italic text-muted-foreground" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ComposerPrimitive.QuoteDismiss asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove quote"
+                        className="-mr-1 size-5"
+                      >
+                        <X className="size-3" />
+                      </Button>
+                    </ComposerPrimitive.QuoteDismiss>
+                  </TooltipTrigger>
+                  <TooltipContent>Remove quote</TooltipContent>
+                </Tooltip>
+              </div>
             </AuiIf>
+            <ComposerPrimitive.Input asChild>
+              <textarea
+                placeholder="Send a message…"
+                autoFocus
+                rows={1}
+                className="field-sizing-content min-h-6 max-h-50 w-full resize-none bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
+              />
+            </ComposerPrimitive.Input>
             <AuiIf condition={(s) => s.composer.dictation !== undefined}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ComposerPrimitive.StopDictation asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Stop dictation"
-                      className="size-8"
-                    >
-                      <MicOff className="size-4 text-primary" />
-                    </Button>
-                  </ComposerPrimitive.StopDictation>
-                </TooltipTrigger>
-                <TooltipContent>Stop dictation</TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-2 rounded-md border-l-2 border-primary/40 bg-muted/30 px-2 py-1 text-sm text-muted-foreground">
+                <Mic className="size-3.5 animate-pulse text-primary" aria-hidden />
+                <ComposerPrimitive.DictationTranscript className="flex-1 italic" />
+              </div>
             </AuiIf>
-            <AuiIf condition={(s) => !s.thread.isRunning}>
-              <ComposerPrimitive.Send asChild>
-                <Button size="sm" className="ml-auto">
-                  Send
-                </Button>
-              </ComposerPrimitive.Send>
-            </AuiIf>
-            <AuiIf condition={(s) => s.thread.isRunning}>
-              <ComposerPrimitive.Cancel asChild>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="ml-auto"
-                  aria-label="Stop generating"
-                >
-                  Stop
-                </Button>
-              </ComposerPrimitive.Cancel>
-            </AuiIf>
-          </div>
-          <SlashCommandTrigger />
-        </ComposerPrimitive.Root>
+            <div className="flex items-center gap-2">
+              {conversationId && (
+                <>
+                  <ComposerOptionsMenu conversationId={conversationId} authedFetch={authedFetch} />
+                  <ConnectorsMenu conversationId={conversationId} authedFetch={authedFetch} />
+                </>
+              )}
+              <AuiIf condition={(s) => s.composer.dictation === undefined}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ComposerPrimitive.Dictate asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Start dictation"
+                        className="size-8"
+                      >
+                        <Mic className="size-4" />
+                      </Button>
+                    </ComposerPrimitive.Dictate>
+                  </TooltipTrigger>
+                  <TooltipContent>Start dictation</TooltipContent>
+                </Tooltip>
+              </AuiIf>
+              <AuiIf condition={(s) => s.composer.dictation !== undefined}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <ComposerPrimitive.StopDictation asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Stop dictation"
+                        className="size-8"
+                      >
+                        <MicOff className="size-4 text-primary" />
+                      </Button>
+                    </ComposerPrimitive.StopDictation>
+                  </TooltipTrigger>
+                  <TooltipContent>Stop dictation</TooltipContent>
+                </Tooltip>
+              </AuiIf>
+              <AuiIf condition={(s) => !s.thread.isRunning}>
+                <ComposerPrimitive.Send asChild>
+                  <Button size="sm" className="ml-auto">
+                    Send
+                  </Button>
+                </ComposerPrimitive.Send>
+              </AuiIf>
+              <AuiIf condition={(s) => s.thread.isRunning}>
+                <ComposerPrimitive.Cancel asChild>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="ml-auto"
+                    aria-label="Stop generating"
+                  >
+                    Stop
+                  </Button>
+                </ComposerPrimitive.Cancel>
+              </AuiIf>
+            </div>
+            <SlashCommandTrigger />
+          </ComposerPrimitive.Root>
         </ComposerPrimitive.Unstable_TriggerPopoverRoot>
       </div>
     </div>
