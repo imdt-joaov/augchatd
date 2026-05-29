@@ -188,7 +188,7 @@ export function ComposerOptionsMenu({
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Scale className="mr-2 size-4" aria-hidden />
-            <span>Model</span>
+            <span>Advanced</span>
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-72 max-h-80 overflow-y-auto">
             <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -203,6 +203,7 @@ export function ComposerOptionsMenu({
               </div>
             )}
             {topModels.map(renderModelItem)}
+            <DropdownMenuSeparator />
             {restModels.length > 0 && (
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
