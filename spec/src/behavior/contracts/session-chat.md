@@ -28,13 +28,14 @@ links:
 Given a valid JWT, a target `conversation_id`, and an end-user message, augchatd runs a server-side **tool-use loop**:
 
 1. **Snapshot** the **conversation's active connector set** at the start of the turn — read from the conversation's saved per-connector active flags, reconciled against the session's resolved scope (see [adr-0010](../../architecture/adrs/0010-unified-connector-model.md) and [contract-connector-toggle](connector-toggle.md)). The snapshot is captured **once per `POST /chat` call** and held for the **entire** tool-use loop of that request — including across multiple LLM round-trips for tool calls within the same request. Toggles arriving after the snapshot is taken do not affect the in-flight turn.
-2. Send conversation context + message to the LLM, exposing only the tools backed by **active connectors for this conversation**.
-3. If the LLM emits tool calls, augchatd dispatches each to the responsible connector server-side:
+2. **Fold user-message quote metadata** into the model input. When the bundled UI's selection-toolbar `Quote` button is used, the resulting user message carries `metadata.custom.quote = { text, messageId }` (see [contract-ui-rendering](ui-rendering.md) §User messages). Before invoking `convertToModelMessages`, augchatd prepends a markdown blockquote of `quote.text` as a leading `text` part on each affected user message so the LLM sees the quoted excerpt. The transform is idempotent and only mutates the model-input copy — the persisted user message keeps its original `parts` + `metadata.custom.quote`, so the UI re-renders the quote chip from metadata on reload.
+3. Send conversation context + message to the LLM, exposing only the tools backed by **active connectors for this conversation**.
+4. If the LLM emits tool calls, augchatd dispatches each to the responsible connector server-side:
    - **MCP-type connectors** with that connector's credentials (see [mcp-invocation](mcp-invocation.md))
    - **RAG-type connectors** scoped to that connector's allowed `indexes[]` (see [rag-query](rag-query.md))
-4. Feed tool results back to the LLM.
-5. Loop until the LLM produces a final assistant message OR a per-request **step cap** is hit (currently 100 steps). If the cap is hit before a final message is produced, augchatd emits a visible warning text part into the stream (so the user sees "hit the tool-use depth limit ... data is partial" instead of a silently-truncated conversation).
-6. **Stream** the reply to the browser using the assistant-ui native protocol (Vercel AI SDK data stream). Each assistant message in the stream carries `metadata.augchatd = { model_id, provider }` — the model and provider that produced that turn. The bundled UI renders this as a small per-message chip so a user who switched models mid-conversation can tell which model produced each reply.
+5. Feed tool results back to the LLM.
+6. Loop until the LLM produces a final assistant message OR a per-request **step cap** is hit (currently 100 steps). If the cap is hit before a final message is produced, augchatd emits a visible warning text part into the stream (so the user sees "hit the tool-use depth limit ... data is partial" instead of a silently-truncated conversation).
+7. **Stream** the reply to the browser using the assistant-ui native protocol (Vercel AI SDK data stream). Each assistant message in the stream carries `metadata.augchatd = { model_id, provider }` — the model and provider that produced that turn. The bundled UI renders this as a small per-message chip so a user who switched models mid-conversation can tell which model produced each reply.
 
 Throughout, only the session's provisioned credentials and the **conversation's active scope captured at turn start** are used. Inactive connectors are not exposed to the LLM; toggling a connector mid-turn does **not** abort an in-flight tool call.
 

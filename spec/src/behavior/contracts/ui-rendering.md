@@ -55,6 +55,8 @@ Per-thread UI surfaces (not per-message):
 
 Rendered as plain text (with `whitespace: pre-wrap`). No Markdown, no syntax highlighting — preserves what the user typed verbatim.
 
+When the user invoked the selection-toolbar **Quote** action on an earlier assistant message, the resulting message carries `metadata.custom.quote = { text, messageId }` and the bubble shows a quote chip (left-bordered, italic, line-clamped to 3 lines) above the typed text. The chip is rendered from metadata (via `MessagePrimitive.Quote` / `useMessageQuote`), not from the message `parts`. The backend folds the same `text` into a leading markdown blockquote part **only on the model-input copy** of the message (see [contract-session-chat](session-chat.md) §Promise step 2), so the LLM sees the quote without duplicating it in the rendered user bubble.
+
 ## Related
 
 - [contract-ui-handshake](ui-handshake.md) — how the UI obtains its JWT and theme

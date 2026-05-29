@@ -690,6 +690,19 @@ function UserMessage() {
         You
       </div>
       <div className="rounded-2xl rounded-tr-md border bg-muted px-4 py-2.5 max-w-[85%] whitespace-pre-wrap">
+        <MessagePrimitive.Quote>
+          {({ text }) => (
+            <div className="mb-2 flex items-start gap-2 rounded-md border-l-2 border-primary/40 bg-background/40 p-2 text-sm">
+              <QuoteIcon
+                className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span className="line-clamp-3 flex-1 whitespace-pre-wrap italic text-muted-foreground">
+                {text}
+              </span>
+            </div>
+          )}
+        </MessagePrimitive.Quote>
         <MessagePrimitive.Parts>
           {({ part }) => {
             if (part.type === "text") return <>{part.text}</>;

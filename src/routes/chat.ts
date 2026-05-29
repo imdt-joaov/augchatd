@@ -7,6 +7,7 @@ import {
   stepCountIs,
   type UIMessage,
 } from "ai";
+import { injectQuoteContext } from "../inject-quote-context.ts";
 import { llmFor } from "../llm.ts";
 import { isUpstreamUnauthorizedSentinel, toolsForActiveConnectors } from "../mcp.ts";
 import { consumeRagHits, toolsForActiveRagConnectors } from "../rag.ts";
@@ -115,7 +116,14 @@ export async function chatHandler(c: Context): Promise<Response> {
     ...toolsForActiveRagConnectors(session.ragClients, ragConnectors, activeMap),
   };
 
-  const messages = await convertToModelMessages(body.messages);
+  // Fold any per-user-message quote metadata (from the bundled UI's
+  // selection-toolbar Quote button) into a leading markdown blockquote
+  // BEFORE conversion — `convertToModelMessages` drops `metadata`, so
+  // without this step the quoted excerpt never reaches the LLM.
+  // `originalMessages` below stays unrewritten so persistence keeps
+  // `metadata.custom.quote` intact and the UI re-renders the quote
+  // chip from metadata on reload.
+  const messages = await convertToModelMessages(injectQuoteContext(body.messages));
 
   writeTraceEvent(conversationId, {
     type: "request",
