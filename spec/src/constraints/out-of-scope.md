@@ -31,6 +31,7 @@ evidence:
 ## Connectors
 
 - **Allow the end user to add a connector mid-conversation.** The connector list is fixed at session creation; end-user toggles can only narrow it. Re-mint the session to change scope.
+- **Configure MCP servers from the browser.** augchatd connectors are provisioned server-side via the mTLS-authenticated `POST /sessions` call. The browser never sees connector URLs, OAuth tokens, or bearer credentials. The assistant-ui upstream offers a browser-managed MCP path (`@assistant-ui/react-mcp` + `McpConfigDialog`); that path is incompatible with our intent ("credentials never seen by the browser"). The canonical augchatd UI for MCP visibility is the toggle-only `ConnectorsMenu`, governed by [contract-connector-toggle](../behavior/contracts/connector-toggle.md) and [adr-0010](../architecture/adrs/0010-unified-connector-model.md).
 
 ## Storage & data
 
