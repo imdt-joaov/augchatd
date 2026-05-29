@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Brain, ChevronDown, Scale, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,8 @@ interface ModelInfo {
   display_name: string;
   provider: string;
   supports_reasoning: boolean;
+  /** ISO 8601 UTC — see http-get-session-models contract. */
+  created_at: string;
 }
 
 interface ModelsResponse {
@@ -139,6 +141,37 @@ export function ComposerOptionsMenu({
   const supportsReasoning = currentModel?.supports_reasoning ?? false;
   const reasoningTooltip = reasoningTooltipFor(currentModelId);
 
+  // Sort defensively by `created_at` desc — ISO 8601 strings sort
+  // lexicographically. Surface only the 3 newest in the main list;
+  // the rest live behind a "More models" submenu so the picker stays
+  // scannable as providers keep shipping new models.
+  const sortedModels = useMemo(
+    () =>
+      (models ?? [])
+        .slice()
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [models],
+  );
+  const topModels = sortedModels.slice(0, 3);
+  const restModels = sortedModels.slice(3);
+
+  const renderModelItem = (m: ModelInfo) => {
+    const isSelected = m.id === currentModelId;
+    return (
+      <DropdownMenuCheckboxItem
+        key={m.id}
+        checked={isSelected}
+        disabled={busy}
+        onSelect={(e) => {
+          e.preventDefault();
+          void pickModel(m.id);
+        }}
+      >
+        <span className="truncate">{m.display_name}</span>
+      </DropdownMenuCheckboxItem>
+    );
+  };
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -169,22 +202,17 @@ export function ComposerOptionsMenu({
                 No models returned.
               </div>
             )}
-            {models?.map((m) => {
-              const isSelected = m.id === currentModelId;
-              return (
-                <DropdownMenuCheckboxItem
-                  key={m.id}
-                  checked={isSelected}
-                  disabled={busy}
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    void pickModel(m.id);
-                  }}
-                >
-                  <span className="truncate">{m.display_name}</span>
-                </DropdownMenuCheckboxItem>
-              );
-            })}
+            {topModels.map(renderModelItem)}
+            {restModels.length > 0 && (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <span>More models</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-72 max-h-80 overflow-y-auto">
+                  {restModels.map(renderModelItem)}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            )}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
 

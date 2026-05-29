@@ -12,6 +12,13 @@ export interface ProviderModel {
   /** Friendly label for the UI (may equal id when the provider has no display name). */
   display_name: string;
   provider: string;
+  /**
+   * ISO 8601 UTC timestamp of when the provider published this model.
+   * Normalized from OpenAI's `created` (unix seconds) and Anthropic's
+   * `created_at` (RFC 3339). The bundled UI sorts by this field to
+   * surface the newest models first in the picker.
+   */
+  created_at: string;
 }
 
 export async function listProviderModels(
@@ -29,7 +36,7 @@ export async function listProviderModels(
 }
 
 interface OpenAIListResponse {
-  data: Array<{ id: string; owned_by?: string }>;
+  data: Array<{ id: string; owned_by?: string; created: number }>;
 }
 
 async function listOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
@@ -68,12 +75,22 @@ async function listOpenAIModels(apiKey: string): Promise<ProviderModel[]> {
     .filter((m) => !specialRe.test(m.id))
     .filter((m) => !imageRe.test(m.id))
     .filter((m) => !legacyRe.test(m.id))
-    .map((m) => ({ id: m.id, display_name: m.id, provider: "openai" }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .map((m) => ({
+      id: m.id,
+      display_name: m.id,
+      provider: "openai",
+      created_at: new Date(m.created * 1000).toISOString(),
+    }))
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 interface AnthropicListResponse {
-  data: Array<{ id: string; display_name?: string; type?: string }>;
+  data: Array<{
+    id: string;
+    display_name?: string;
+    type?: string;
+    created_at: string;
+  }>;
 }
 
 async function listAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
@@ -92,6 +109,7 @@ async function listAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
       id: m.id,
       display_name: m.display_name ?? m.id,
       provider: "anthropic",
+      created_at: m.created_at,
     }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }

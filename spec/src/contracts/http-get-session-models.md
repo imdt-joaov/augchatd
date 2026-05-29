@@ -30,8 +30,8 @@ No body.
 ```json
 {
   "models": [
-    { "id": "gpt-5-mini",   "display_name": "gpt-5-mini",   "provider": "openai" },
-    { "id": "gpt-4.1",      "display_name": "gpt-4.1",      "provider": "openai" }
+    { "id": "gpt-5-mini", "display_name": "gpt-5-mini", "provider": "openai", "created_at": "2025-08-07T00:00:00.000Z" },
+    { "id": "gpt-4.1",    "display_name": "gpt-4.1",    "provider": "openai", "created_at": "2025-04-14T00:00:00.000Z" }
   ],
   "current_model_id": "gpt-5-mini",
   "provider": "openai",
@@ -41,7 +41,8 @@ No body.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `models` | array | The provider's chat-capable, current-generation model list, filtered server-side (drops legacy gpt-3.5/4 entries, audio, image-gen, codex, search-api, deep-research). |
+| `models` | array | The provider's chat-capable, current-generation model list, filtered server-side (drops legacy gpt-3.5/4 entries, audio, image-gen, codex, search-api, deep-research). Sorted by `created_at` descending — newest first. |
+| `models[].created_at` | string | ISO 8601 UTC timestamp of upstream model publication. Normalized from OpenAI's `created` (unix seconds) and Anthropic's `created_at` (RFC 3339). The bundled UI uses this to render the 3 most-recent models in the picker and the rest under a "More models" submenu. |
 | `current_model_id` | string | The session's session-default model (from `model.model_id` at session creation — what the chat turn falls back to when no per-conversation override is set). |
 | `provider` | string | The session's provider (`openai`, `anthropic`, ...) — same one used for the upstream `/v1/models` call. |
 | `cached` | boolean | `true` if served from the in-process cache; `false` if this call hit the provider. |
