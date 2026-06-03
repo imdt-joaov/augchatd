@@ -120,6 +120,16 @@ docker compose up --build
 
 The proxy refuses to start if `docker/certs/server.crt|server.key|clients-ca.crt` is missing; augchatd refuses to start until the proxy is healthy. See [ADR-0014](spec/src/architecture/adrs/0014-docker-compose-prod-deployment.md) for the wiring rationale and [ADR-0012](spec/src/architecture/adrs/0012-out-of-process-tls.md) for why TLS lives outside augchatd. The compose stack is prod-only; demo via Docker continues to use the `docker run` snippet above.
 
+### Deploying to a VPS (Ubuntu/Debian)
+
+Assuming the repo is already on the VPS (`git clone` or `scp`), one script does the rest:
+
+```bash
+sudo ./scripts/deploy.sh <domain>
+```
+
+It installs Docker + Compose, enables it on boot, configures UFW (22, 80, 443, 8443), generates `.env` (preserving `AUGCHATD_JWT_SECRET` across reruns so live JWTs survive a re-deploy), seeds self-signed certs via the `cert-init` service, and boots the stack. Idempotent — safe to re-run after a partial failure or to update the domain.
+
 ## How it works
 
 ```
