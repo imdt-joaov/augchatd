@@ -1,0 +1,65 @@
+# augchatd prod-mode stack. TLS termination is out-of-process by design
+# (spec/src/architecture/adrs/0012-out-of-process-tls.md); compose wires
+# the nginx proxy + the augchatd app + an on-demand cert-init service.
+#
+# Bring-up:
+#   docker compose run --rm cert-init <domain>      # one-off, idempotent
+#   echo "AUGCHATD_JWT_SECRET=$(openssl rand -hex 32)" >> .env
+#   echo "AUGCHATD_DOMAIN=<domain>" >> .env
+#   docker compose up --build
+#
+# Guarantees encoded here:
+#   - augchatd's port 8080 is NEVER published to the host.
+#   - nginx refuses to boot without certs (entrypoint check).
+#   - augchatd's depends_on waits for nginx's healthcheck to pass
+#     (= nginx process running with a valid config). If certs are
+#     missing nginx exits non-zero and augchatd never starts.
+
+services:
+  augchatd:
+    build: .
+    environment:
+      AUGCHATD_MODE: prod
+      AUGCHATD_PORT: 8080
+      TRUSTED_PROXY: "true"
+      AUGCHATD_JWT_SECRET: ${AUGCHATD_JWT_SECRET}
+      AUGCHATD_TRACE_DIR: /app/data-trace
+    volumes:
+      - ./data:/app/data
+      - ./data-trace:/app/data-trace
+    networks:
+      - augchatd_net
+    depends_on:
+      nginx:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    build: ./docker/nginx
+    environment:
+      AUGCHATD_DOMAIN: ${AUGCHATD_DOMAIN:-augchatd.local}
+    ports:
+      - "443:443"
+      - "8443:8443"
+    volumes:
+      - ./docker/certs:/etc/ssl/augchatd:ro
+    networks:
+      - augchatd_net
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t && pidof nginx >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 2s
+    restart: unless-stopped
+
+  cert-init:
+    build: ./docker/cert-init
+    profiles: ["tools"]
+    volumes:
+      - ./docker/certs:/out
+    # Usage: docker compose run --rm cert-init <domain> [--force]
+
+networks:
+  augchatd_net:
+    driver: bridge

@@ -3,8 +3,8 @@ id: adr-0012-out-of-process-tls
 type: adr
 status: proposed
 evidence:
-  - source: docs/deployment/nginx.conf.example
-    section: "sample nginx config"
+  - source: docker/nginx/nginx.conf.template
+    section: "two-server-block proxy (443 browser, 8443 mTLS)"
   - source: src/mtls-trust.ts
     section: "requireMtlsTrust middleware"
   - source: src/identity.ts

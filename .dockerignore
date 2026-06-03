@@ -1,0 +1,13 @@
+node_modules
+ui/node_modules
+data
+data-trace
+local/demo_session.json
+local/demo_session.local.json
+.env
+.env.local
+.git
+ui/dist
+*.tsbuildinfo
+docker/certs/*
+!docker/certs/.gitkeep

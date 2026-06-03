@@ -9,7 +9,7 @@ evidence:
 
 # Components
 
-augchatd is a **single binary** that contains everything below. TLS is **not** terminated by augchatd itself — see [adr-0012-out-of-process-tls](adrs/0012-out-of-process-tls.md). A reverse proxy (the deployment's choice; we ship a sample for nginx in [`docs/deployment/nginx.conf.example`](../../../docs/deployment/nginx.conf.example)) terminates mTLS for the control-plane leg and forwards `X-Client-Cert-Verify` + `X-Client-Cert-Subject` to augchatd. The diagram below shows the augchatd process in isolation; in production it sits behind the reverse proxy.
+augchatd is a **single binary** that contains everything below. TLS is **not** terminated by augchatd itself — see [adr-0012-out-of-process-tls](adrs/0012-out-of-process-tls.md). A reverse proxy (the deployment's choice; we ship a containerized nginx setup at [`docker/nginx/`](../../../docker/nginx/), see [adr-0014](adrs/0014-docker-compose-prod-deployment.md)) terminates mTLS for the control-plane leg and forwards `X-Client-Cert-Verify` + `X-Client-Cert-Subject` to augchatd. The diagram below shows the augchatd process in isolation; in production it sits behind the reverse proxy.
 
 ```
 augchatd process
@@ -88,3 +88,4 @@ See ADRs:
 - [0009 — React + Vite bundled UI](adrs/0009-react-vite-bundled-ui.md)
 - [0010 — Unified connector model](adrs/0010-unified-connector-model.md)
 - [0012 — TLS is terminated out-of-process](adrs/0012-out-of-process-tls.md)
+- [0014 — Production deployment is a docker-compose stack](adrs/0014-docker-compose-prod-deployment.md)

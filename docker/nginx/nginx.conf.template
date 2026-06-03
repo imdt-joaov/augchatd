@@ -1,0 +1,78 @@
+# augchatd's mTLS-protected control plane — containerized variant.
+#
+# Two server blocks (per adr-0012-out-of-process-tls):
+#   - port 443:  browser-facing TLS; mTLS headers stripped, proxied to /
+#   - port 8443: mTLS-verified control plane; X-Client-Cert-Verify +
+#                X-Client-Cert-Subject forwarded to /sessions only.
+#
+# Implementation-specific shape (per adr-0014-docker-compose-prod-deployment):
+#   - server_name is parameterized by ${AUGCHATD_DOMAIN} (envsubst at boot)
+#   - proxy_pass targets the docker service `augchatd:8080` via the
+#     embedded docker resolver (127.0.0.11), with the upstream held in a
+#     variable so the lookup happens at request time, not boot. This is
+#     deliberate: compose blocks augchatd's start until nginx is healthy
+#     (depends_on: service_healthy), so the upstream hostname does NOT
+#     exist at nginx boot. A literal `proxy_pass http://augchatd:8080`
+#     deadlocks. augchatd's port stays off the host; the docker network
+#     is the back-channel adr-0012-out-of-process-tls requires.
+#
+# augchatd consumes X-Client-Cert-Verify / X-Client-Cert-Subject from this
+# proxy and trusts them only when TRUSTED_PROXY=true. The header trust
+# is declarative — nothing else verifies origin. Keep augchatd off the
+# public network.
+
+resolver 127.0.0.11 valid=10s ipv6=off;
+resolver_timeout 5s;
+
+# Browser-facing JWT API.
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${AUGCHATD_DOMAIN};
+
+    ssl_certificate     /etc/ssl/augchatd/server.crt;
+    ssl_certificate_key /etc/ssl/augchatd/server.key;
+
+    location / {
+        set $augchatd_upstream http://augchatd:8080;
+        proxy_pass         $augchatd_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        # Strip any inbound impersonation of the mTLS headers — the
+        # browser-facing leg never carries a verified client cert.
+        proxy_set_header   X-Client-Cert-Verify  "";
+        proxy_set_header   X-Client-Cert-Subject "";
+        # SSE / streaming for chat tokens.
+        proxy_buffering off;
+        proxy_read_timeout 300s;
+    }
+}
+
+# mTLS control-plane (POST /sessions, DELETE /sessions/:id).
+server {
+    listen 8443 ssl;
+    http2 on;
+    server_name ${AUGCHATD_DOMAIN};
+
+    ssl_certificate     /etc/ssl/augchatd/server.crt;
+    ssl_certificate_key /etc/ssl/augchatd/server.key;
+
+    ssl_client_certificate /etc/ssl/augchatd/clients-ca.crt;
+    ssl_verify_client      on;
+    ssl_verify_depth       2;
+
+    location /sessions {
+        set $augchatd_upstream http://augchatd:8080;
+        proxy_pass         $augchatd_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header   Host                  $host;
+        proxy_set_header   X-Forwarded-For       $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto     https;
+        proxy_set_header   X-Client-Cert-Verify  $ssl_client_verify;
+        proxy_set_header   X-Client-Cert-Subject $ssl_client_s_dn;
+    }
+
+    location / { return 404; }
+}

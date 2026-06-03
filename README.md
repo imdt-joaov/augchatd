@@ -6,7 +6,7 @@
 
 ```bash
 # Your backend, once per chat session:
-curl -X POST https://augchatd.your-infra/sessions \
+curl -X POST https://augchatd.your-infra:8443/sessions \
   --cert prod-client.pem --key prod-client.key \
   -H 'Content-Type: application/json' \
   -d '{
@@ -100,6 +100,25 @@ Working from a checkout instead of docker? `./run-dev-local.sh` boots the same p
 Demo mode is for local testing and public demos only. It bypasses mTLS, runs single-tenant, holds credentials in process memory (loaded once from disk at boot), and **does not accept `POST /sessions`** — sessions are minted by `POST /demo/sessions` from the boot-time config instead (calls to the mTLS `POST /sessions` or `DELETE /sessions/:id` return 404). The bundled UI displays a **"Demo session — not authenticated"** banner so anyone using it can see at a glance that they are not in production. The production path (mTLS + `POST /sessions` from your backend) is unchanged when you graduate; the same binary serves both modes — and exercises the same iframe handshake every day in dev.
 
 augchatd serves `GET /healthz` on the same origin in both modes, returning `{ "mode": "demo" | "prod", "status": "ok" }`. The `mode` field is the safety net for accidental demo deploys — fail your deploy if a production health check reports `"mode": "demo"`.
+
+### Production-ish boot (Docker Compose, self-signed mTLS)
+
+For a prod-mode boot on your machine — nginx terminating TLS in front of augchatd, mTLS on `:8443`, browser TLS on `:443`:
+
+```bash
+# 1. Generate the self-signed CA + server + client bundle into docker/certs/.
+#    Idempotent; re-running with the same domain is a no-op.
+docker compose run --rm cert-init augchatd.local
+
+# 2. Per-deploy secrets.
+echo "AUGCHATD_JWT_SECRET=$(openssl rand -hex 32)" > .env
+echo "AUGCHATD_DOMAIN=augchatd.local"             >> .env
+
+# 3. Boot. augchatd has no published ports — only nginx is reachable.
+docker compose up --build
+```
+
+The proxy refuses to start if `docker/certs/server.crt|server.key|clients-ca.crt` is missing; augchatd refuses to start until the proxy is healthy. See [ADR-0014](spec/src/architecture/adrs/0014-docker-compose-prod-deployment.md) for the wiring rationale and [ADR-0012](spec/src/architecture/adrs/0012-out-of-process-tls.md) for why TLS lives outside augchatd. The compose stack is prod-only; demo via Docker continues to use the `docker run` snippet above.
 
 ## How it works
 
