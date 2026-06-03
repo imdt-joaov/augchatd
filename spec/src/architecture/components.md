@@ -89,3 +89,4 @@ See ADRs:
 - [0010 — Unified connector model](adrs/0010-unified-connector-model.md)
 - [0012 — TLS is terminated out-of-process](adrs/0012-out-of-process-tls.md)
 - [0014 — Production deployment is a docker-compose stack](adrs/0014-docker-compose-prod-deployment.md)
+- [0015 — Let's Encrypt server cert via HTTP-01 standalone](adrs/0015-letsencrypt-http01-standalone.md)

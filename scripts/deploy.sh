@@ -6,7 +6,15 @@
 #   - The augchatd repo is already on the VPS (git clone / scp / rsync).
 #   - DNS for <domain> already points at this VPS (or you'll do that next).
 #
-# Usage:  sudo ./scripts/deploy.sh <domain>
+# Usage:
+#   sudo ./scripts/deploy.sh <domain>
+#   sudo ./scripts/deploy.sh <domain> --letsencrypt <email>
+#
+# Without --letsencrypt: nginx serves the self-signed bundle from cert-init.
+# With --letsencrypt:    the bundle's server.{crt,key} are then overwritten
+#                        by a Let's Encrypt PROD cert (no staging mode —
+#                        see adr-0015), and a systemd timer is installed
+#                        to renew weekly.
 #
 # Idempotent: every step checks current state before changing anything.
 # Safe to re-run after a partial failure, or to update the domain.
@@ -17,8 +25,26 @@ set -euo pipefail
 # stay coherent for any logging that happens before we lose them.
 [ "$EUID" -eq 0 ] || exec sudo -E "$0" "$@"
 
-[ $# -eq 1 ] || { echo "Usage: sudo ./scripts/deploy.sh <domain>" >&2; exit 64; }
-DOMAIN="$1"
+usage() {
+    echo "Usage:" >&2
+    echo "  sudo ./scripts/deploy.sh <domain>" >&2
+    echo "  sudo ./scripts/deploy.sh <domain> --letsencrypt <email>" >&2
+    exit 64
+}
+
+[ $# -ge 1 ] || usage
+DOMAIN="$1"; shift
+LETSENCRYPT_EMAIL=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --letsencrypt)
+            [ $# -ge 2 ] || usage
+            LETSENCRYPT_EMAIL="$2"
+            shift 2
+            ;;
+        *) usage ;;
+    esac
+done
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -67,15 +93,15 @@ systemctl enable --now docker
 
 # ---------------------------------------------------------------------------
 # [4] UFW: deny incoming by default, allow only the ports the stack needs.
-#     22 = SSH, 80 = HTTP (open preemptively for a future Let's Encrypt
-#     migration), 443 = browser TLS, 8443 = mTLS control plane.
+#     22 = SSH, 80 = HTTP (used briefly by letsencrypt-init standalone for
+#     ACME HTTP-01), 443 = browser TLS, 8443 = mTLS control plane.
 # ---------------------------------------------------------------------------
 step "Configuring UFW (22, 80, 443, 8443)"
 ufw --force enable >/dev/null
 ufw default deny incoming  >/dev/null
 ufw default allow outgoing >/dev/null
 ufw allow 22/tcp   comment 'ssh'                         >/dev/null
-ufw allow 80/tcp   comment 'http (future letsencrypt)'   >/dev/null
+ufw allow 80/tcp   comment 'http (letsencrypt http-01)'  >/dev/null
 ufw allow 443/tcp  comment 'augchatd browser TLS'        >/dev/null
 ufw allow 8443/tcp comment 'augchatd mTLS control plane' >/dev/null
 
@@ -103,9 +129,9 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
-# [6] Self-signed cert bundle. cert-init is idempotent per-artifact: skips
-#     the CA + clients-CA if present, regens server.crt only when SAN
-#     diverges from $DOMAIN.
+# [6] Self-signed cert bundle (always — cert-init produces the CA,
+#     clients-CA, sample client, AND a fallback self-signed server cert).
+#     When --letsencrypt is on, step 7.5 overwrites only server.{crt,key}.
 # ---------------------------------------------------------------------------
 step "Generating self-signed SSL bundle for $DOMAIN"
 docker compose run --rm cert-init "$DOMAIN"
@@ -115,6 +141,68 @@ docker compose run --rm cert-init "$DOMAIN"
 # ---------------------------------------------------------------------------
 step "Building and starting the stack"
 docker compose up -d --build
+
+# ---------------------------------------------------------------------------
+# [7.5] Let's Encrypt: issue/refresh the cert AND install the systemd
+#       renewal timer. Only when --letsencrypt was passed.
+# ---------------------------------------------------------------------------
+install_systemd_renewal() {
+    local svc_path=/etc/systemd/system/augchatd-letsencrypt-renew.service
+    local timer_path=/etc/systemd/system/augchatd-letsencrypt-renew.timer
+    local tmp_svc tmp_timer changed=0
+    tmp_svc=$(mktemp); tmp_timer=$(mktemp)
+    # shellcheck disable=SC2064
+    trap "rm -f '$tmp_svc' '$tmp_timer'" RETURN
+
+    cat > "$tmp_svc" <<EOF
+[Unit]
+Description=augchatd Let's Encrypt cert renewal
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=$REPO_ROOT
+ExecStart=/usr/bin/docker compose run --rm --service-ports letsencrypt-init renew
+ExecStartPost=/usr/bin/docker compose exec -T nginx nginx -s reload
+EOF
+
+    cat > "$tmp_timer" <<'EOF'
+[Unit]
+Description=Weekly augchatd Let's Encrypt renewal
+
+[Timer]
+OnCalendar=Sun 03:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    if ! cmp -s "$tmp_svc" "$svc_path"; then
+        install -m 0644 "$tmp_svc" "$svc_path"
+        changed=1
+    fi
+    if ! cmp -s "$tmp_timer" "$timer_path"; then
+        install -m 0644 "$tmp_timer" "$timer_path"
+        changed=1
+    fi
+    if [ "$changed" = "1" ]; then
+        systemctl daemon-reload
+    fi
+    systemctl enable --now augchatd-letsencrypt-renew.timer
+}
+
+if [ -n "$LETSENCRYPT_EMAIL" ]; then
+    step "Issuing/refreshing Let's Encrypt cert for $DOMAIN ($LETSENCRYPT_EMAIL)"
+    docker compose run --rm --service-ports letsencrypt-init \
+        issue "$DOMAIN" "$LETSENCRYPT_EMAIL"
+    docker compose exec -T nginx nginx -s reload
+
+    step "Installing systemd timer for weekly cert renewal"
+    install_systemd_renewal
+fi
 
 # ---------------------------------------------------------------------------
 # [8] Wait for nginx healthy, then smoke-test through it.
@@ -133,8 +221,17 @@ if [ "$state" != "healthy" ]; then
     exit 1
 fi
 
-step "Smoke test: GET https://localhost/healthz"
-body=$(curl -ks "https://localhost/healthz" || true)
+if [ -n "$LETSENCRYPT_EMAIL" ]; then
+    step "Smoke test: GET https://$DOMAIN/healthz (browser-trusted cert expected)"
+    smoke_url="https://$DOMAIN/healthz"
+    smoke_args=""
+else
+    step "Smoke test: GET https://localhost/healthz (self-signed)"
+    smoke_url="https://localhost/healthz"
+    smoke_args="-k"
+fi
+# shellcheck disable=SC2086
+body=$(curl -sS $smoke_args "$smoke_url" || true)
 echo "  response: $body"
 echo "$body" | grep -q '"mode":"prod"' || {
     echo "Unexpected /healthz response — investigate via 'docker compose logs augchatd'." >&2

@@ -60,6 +60,25 @@ services:
       - ./docker/certs:/out
     # Usage: docker compose run --rm cert-init <domain> [--force]
 
+  # Let's Encrypt cert via HTTP-01 standalone (adr-0015). Overwrites only
+  # server.{crt,key} in docker/certs/ — cert-init's CA + clients-CA stay.
+  # Port 80 is published only when invoked with --service-ports, so an
+  # accidental `docker compose up` never holds 80 on the host.
+  letsencrypt-init:
+    build: ./docker/letsencrypt-init
+    profiles: ["tools"]
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/certs:/out
+      - augchatd_letsencrypt:/etc/letsencrypt
+    # Usage:
+    #   docker compose run --rm --service-ports letsencrypt-init issue <domain> <email>
+    #   docker compose run --rm --service-ports letsencrypt-init renew
+
 networks:
   augchatd_net:
     driver: bridge
+
+volumes:
+  augchatd_letsencrypt: {}
